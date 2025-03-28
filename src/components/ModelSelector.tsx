@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAiModel, AiModelType } from '@/hooks/useAiModel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Info } from 'lucide-react';
+import { Info, Download, Loader2 } from 'lucide-react';
 
 interface ModelSelectorProps {
   value: AiModelType;
@@ -15,7 +15,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   value, 
   onValueChange 
 }) => {
-  const { models, getModelInfo } = useAiModel();
+  const { models, getModelInfo, isLoading, loadModel } = useAiModel();
   const [isInfoOpen, setIsInfoOpen] = React.useState(false);
   const [selectedModelInfo, setSelectedModelInfo] = React.useState(getModelInfo(value));
 
@@ -24,12 +24,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     setIsInfoOpen(true);
   };
 
+  const handleLoadModel = async () => {
+    if (value) {
+      await loadModel(value);
+    }
+  };
+
   return (
-    <div>
+    <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Select
           value={value}
           onValueChange={onValueChange}
+          disabled={isLoading}
         >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Chọn mô hình" />
@@ -53,10 +60,31 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           variant="ghost" 
           size="icon" 
           onClick={() => handleInfoClick(value)}
+          disabled={isLoading}
         >
           <Info className="h-4 w-4" />
         </Button>
       </div>
+
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="w-full"
+        onClick={handleLoadModel}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Đang tải model...
+          </>
+        ) : (
+          <>
+            <Download className="h-4 w-4 mr-2" />
+            Tải model về máy
+          </>
+        )}
+      </Button>
 
       <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>
         <DialogContent>
@@ -77,6 +105,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 <h4 className="font-medium">Yêu cầu</h4>
                 <p className="text-sm text-gray-600">{selectedModelInfo.requirements}</p>
               </div>
+              <div>
+                <h4 className="font-medium">Platform</h4>
+                <p className="text-sm text-gray-600">{selectedModelInfo.platform}</p>
+              </div>
+              {selectedModelInfo.huggingfaceId && (
+                <div>
+                  <h4 className="font-medium">Hugging Face ID</h4>
+                  <p className="text-sm text-gray-600">{selectedModelInfo.huggingfaceId}</p>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
