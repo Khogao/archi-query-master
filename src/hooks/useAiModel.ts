@@ -66,12 +66,25 @@ export const AI_MODELS: ModelInfo[] = [
 
 export const useAiModel = (initialModel: AiModelType = 'llama-3.1-sonar-small-128k-online') => {
   const [selectedModel, setSelectedModel] = useState<AiModelType>(initialModel);
+  const [selectedPlatform, setSelectedPlatform] = useState<PlatformType>('huggingface');
   const [embeddingPipeline, setEmbeddingPipeline] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { toast } = useToast();
 
   const getModelInfo = (modelId: AiModelType): ModelInfo | undefined => {
     return AI_MODELS.find(model => model.id === modelId);
+  };
+
+  // Lấy danh sách các platform có sẵn
+  const getAvailablePlatforms = (): PlatformType[] => {
+    const platforms = new Set<PlatformType>();
+    AI_MODELS.forEach(model => platforms.add(model.platform));
+    return Array.from(platforms);
+  };
+
+  // Lấy danh sách models theo platform
+  const getModelsByPlatform = (platform: PlatformType): ModelInfo[] => {
+    return AI_MODELS.filter(model => model.platform === platform);
   };
 
   const loadModel = async (modelId: AiModelType) => {
@@ -89,10 +102,12 @@ export const useAiModel = (initialModel: AiModelType = 'llama-3.1-sonar-small-12
       });
       
       // Tải model embedding từ Hugging Face
+      const options = modelId === 'local-embedding-model' ? { quantized: true } : {};
+      
       const extractor = await pipeline(
         "feature-extraction",
         modelInfo.huggingfaceId,
-        { quantized: modelId === 'local-embedding-model' }
+        options
       );
       
       setEmbeddingPipeline(extractor);
@@ -149,8 +164,12 @@ export const useAiModel = (initialModel: AiModelType = 'llama-3.1-sonar-small-12
   return {
     selectedModel,
     setSelectedModel,
+    selectedPlatform,
+    setSelectedPlatform,
     models: AI_MODELS,
     getModelInfo,
+    getAvailablePlatforms,
+    getModelsByPlatform,
     isLoading,
     loadModel,
     generateEmbedding,

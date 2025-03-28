@@ -1,10 +1,10 @@
 
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAiModel, AiModelType } from '@/hooks/useAiModel';
+import { useAiModel, AiModelType, PlatformType } from '@/hooks/useAiModel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Info, Download, Loader2 } from 'lucide-react';
+import { Info, Download, Loader2, Server } from 'lucide-react';
 
 interface ModelSelectorProps {
   value: AiModelType;
@@ -15,9 +15,21 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   value, 
   onValueChange 
 }) => {
-  const { models, getModelInfo, isLoading, loadModel } = useAiModel();
+  const { 
+    models, 
+    getModelInfo, 
+    isLoading, 
+    loadModel, 
+    selectedPlatform, 
+    setSelectedPlatform, 
+    getAvailablePlatforms,
+    getModelsByPlatform
+  } = useAiModel();
   const [isInfoOpen, setIsInfoOpen] = React.useState(false);
   const [selectedModelInfo, setSelectedModelInfo] = React.useState(getModelInfo(value));
+
+  const availablePlatforms = getAvailablePlatforms();
+  const filteredModels = getModelsByPlatform(selectedPlatform);
 
   const handleInfoClick = (modelId: AiModelType) => {
     setSelectedModelInfo(getModelInfo(modelId));
@@ -30,40 +42,80 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     }
   };
 
+  // Khi platform thay đổi, cập nhật model đã chọn nếu cần
+  const handlePlatformChange = (platform: PlatformType) => {
+    setSelectedPlatform(platform);
+    const modelsForPlatform = getModelsByPlatform(platform);
+    
+    // Nếu model hiện tại không thuộc platform mới, chọn model đầu tiên của platform đó
+    if (!modelsForPlatform.some(model => model.id === value) && modelsForPlatform.length > 0) {
+      onValueChange(modelsForPlatform[0].id);
+    }
+  };
+
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="mb-2">
+        <label className="text-sm font-medium mb-1 block">Platform</label>
         <Select
-          value={value}
-          onValueChange={onValueChange}
+          value={selectedPlatform}
+          onValueChange={handlePlatformChange}
           disabled={isLoading}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Chọn mô hình" />
+            <SelectValue placeholder="Chọn platform" />
           </SelectTrigger>
           <SelectContent>
-            {models.map((model) => (
+            {availablePlatforms.map((platform) => (
               <SelectItem 
-                key={model.id} 
-                value={model.id}
-                className="flex justify-between"
+                key={platform} 
+                value={platform}
               >
-                <div className="flex justify-between w-full">
-                  <span>{model.name}</span>
-                  <span className="text-gray-500 text-xs">{model.parameters}</span>
+                <div className="flex items-center">
+                  <Server className="h-4 w-4 mr-2" />
+                  <span className="capitalize">{platform}</span>
                 </div>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={() => handleInfoClick(value)}
-          disabled={isLoading}
-        >
-          <Info className="h-4 w-4" />
-        </Button>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-sm font-medium mb-1 block">Model AI</label>
+        <div className="flex items-center gap-2">
+          <Select
+            value={value}
+            onValueChange={onValueChange}
+            disabled={isLoading}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Chọn mô hình" />
+            </SelectTrigger>
+            <SelectContent>
+              {filteredModels.map((model) => (
+                <SelectItem 
+                  key={model.id} 
+                  value={model.id}
+                  className="flex justify-between"
+                >
+                  <div className="flex justify-between w-full">
+                    <span>{model.name}</span>
+                    <span className="text-gray-500 text-xs">{model.parameters}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => handleInfoClick(value)}
+            disabled={isLoading}
+          >
+            <Info className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <Button 
@@ -107,7 +159,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               </div>
               <div>
                 <h4 className="font-medium">Platform</h4>
-                <p className="text-sm text-gray-600">{selectedModelInfo.platform}</p>
+                <p className="text-sm text-gray-600 capitalize">{selectedModelInfo.platform}</p>
               </div>
               {selectedModelInfo.huggingfaceId && (
                 <div>
