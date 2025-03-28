@@ -9,7 +9,7 @@ import { Upload, Search, Folder } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAiModel, AiModelType } from '@/hooks/useAiModel';
 import { useOcrConfig } from '@/hooks/useOcrConfig';
-import { useDocuments } from '@/hooks/useDocuments';
+import { useDocuments, Folder as FolderType } from '@/hooks/useDocuments';
 import { ModelSelector } from '@/components/ModelSelector';
 import { DocumentList } from '@/components/DocumentList';
 import { FolderList } from '@/components/FolderList';
@@ -29,8 +29,21 @@ const uploadSchema = z.object({
 const Index = () => {
   const [selectedModel, setSelectedModel] = useState<AiModelType>('llama-3.1-sonar-small-128k-online');
   const { config: ocrConfig, updateConfig, getReadableConfig } = useOcrConfig();
-  const { documents, folders, addDocument, deleteDocument, addFolder, getDocumentsByFolder } = useDocuments();
-  const [selectedFolderId, setSelectedFolderId] = useState(folders[0].id);
+  const { 
+    documents, 
+    folders, 
+    addDocument, 
+    deleteDocument, 
+    addFolder, 
+    renameFolder,
+    getDocumentsByFolder,
+    getMainFolders,
+    getSubFolders,
+    getFolderById,
+    getFolderPath
+  } = useDocuments();
+  
+  const [selectedFolderId, setSelectedFolderId] = useState('standards-architecture');
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const { toast } = useToast();
@@ -60,7 +73,8 @@ const Index = () => {
     uploadForm.setValue("folderId", folderId);
   };
 
-  const currentFolderName = folders.find(f => f.id === selectedFolderId)?.name || "";
+  const currentFolder = getFolderById(selectedFolderId);
+  const folderPath = getFolderPath(selectedFolderId);
   const currentFolderDocuments = getDocumentsByFolder(selectedFolderId);
 
   return (
@@ -80,6 +94,9 @@ const Index = () => {
               selectedFolderId={selectedFolderId}
               onFolderSelect={handleFolderSelect}
               onAddFolder={addFolder}
+              onRenameFolder={renameFolder}
+              getSubFolders={getSubFolders}
+              getMainFolders={getMainFolders}
             />
           </div>
 
@@ -105,7 +122,21 @@ const Index = () => {
           {/* Document Management Section */}
           <div className="flex-1 p-6 overflow-auto">
             <div className="mb-6">
-              <h2 className="text-xl font-semibold mb-4">Quản lý tài liệu - {currentFolderName}</h2>
+              <div className="flex items-center mb-2">
+                <h2 className="text-xl font-semibold">Quản lý tài liệu</h2>
+                <div className="mx-2 text-gray-500">›</div>
+                {folderPath.map((folder, index) => (
+                  <React.Fragment key={folder.id}>
+                    {index > 0 && <div className="mx-2 text-gray-500">›</div>}
+                    <span 
+                      className={index === folderPath.length - 1 ? "font-medium" : "text-gray-600"}
+                    >
+                      {folder.name}
+                    </span>
+                  </React.Fragment>
+                ))}
+              </div>
+              
               <div className="flex gap-4 mb-4">
                 <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
                   <DialogTrigger asChild>
@@ -169,7 +200,7 @@ const Index = () => {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Thư mục</FormLabel>
-                              <div className="space-y-1">
+                              <div className="space-y-1 max-h-40 overflow-y-auto">
                                 {folders.map((folder) => (
                                   <Button 
                                     key={folder.id}
@@ -179,7 +210,7 @@ const Index = () => {
                                     className="w-full justify-start"
                                   >
                                     <Folder className="mr-2 h-4 w-4" />
-                                    {folder.name}
+                                    {getFolderPath(folder.id).map(f => f.name).join(' › ')}
                                   </Button>
                                 ))}
                               </div>
