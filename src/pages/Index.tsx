@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +6,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { Upload, Search, Folder } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAiModel } from '@/hooks/useAiModel';
+import { useAiModel, AiModelType } from '@/hooks/useAiModel';
 import { useOcrConfig } from '@/hooks/useOcrConfig';
 import { useDocuments, Folder as FolderType } from '@/hooks/useDocuments';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -27,7 +26,7 @@ const uploadSchema = z.object({
 });
 
 const Index = () => {
-  const [selectedModel, setSelectedModel] = useState<string>('llama-3.1-sonar-small-128k-online');
+  const [selectedModel, setSelectedModel] = useState<AiModelType>('llama-3.1-sonar-small-128k-online');
   const { config: ocrConfig, updateConfig, getReadableConfig } = useOcrConfig();
   const { 
     documents, 
