@@ -3,7 +3,8 @@ import React from 'react';
 import { FolderList } from '@/components/FolderList';
 import { ModelSelector } from '@/components/ModelSelector';
 import { OcrConfigPanel } from '@/components/OcrConfigPanel';
-import { Folder, AiModelType, EmbeddingModelType } from '@/hooks/useDocuments';
+import { Folder } from '@/hooks/useDocuments';
+import { AiModelType, EmbeddingModelType } from '@/hooks/useAiModel';
 import { OcrConfig } from '@/hooks/useOcrConfig';
 
 interface SidebarContentProps {
