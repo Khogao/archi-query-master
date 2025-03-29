@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useAiModel, AiModelType, EmbeddingModelType } from '@/hooks/useAiModel';
+import { useAiModel, AiModelType, EmbeddingModelType, PlatformType } from '@/hooks/useAiModel';
 import { useOcrConfig } from '@/hooks/useOcrConfig';
 import { useDocuments } from '@/hooks/useDocuments';
 import { MainLayout } from '@/layouts/MainLayout';
@@ -13,6 +13,7 @@ import { QueryPanel } from '@/components/QueryPanel';
 const Index = () => {
   // AI Model settings
   const [selectedModel, setSelectedModel] = useState<AiModelType>('llama3:8b');
+  const [selectedPlatform, setSelectedPlatform] = useState<PlatformType>('ollama');
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<EmbeddingModelType>(
     'bkai-foundation-models/vietnamese-bi-encoder'
   );
@@ -66,6 +67,8 @@ const Index = () => {
       onModelChange={setSelectedModel}
       selectedEmbeddingModel={selectedEmbeddingModel}
       onEmbeddingModelChange={setSelectedEmbeddingModel}
+      selectedPlatform={selectedPlatform}
+      onPlatformChange={setSelectedPlatform}
       ocrConfig={ocrConfig}
       onOcrConfigUpdate={updateConfig}
       readableOcrConfig={getReadableConfig()}
@@ -92,7 +95,10 @@ const Index = () => {
       />
       
       <QueryPanel 
-        getSelectedFolderIds={getSelectedFolderIds} 
+        getSelectedFolderIds={getSelectedFolderIds}
+        selectedModel={selectedModel}
+        selectedEmbeddingModel={selectedEmbeddingModel}
+        selectedPlatform={selectedPlatform}
       />
     </>
   );

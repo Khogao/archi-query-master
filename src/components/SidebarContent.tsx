@@ -4,7 +4,7 @@ import { FolderList } from '@/components/FolderList';
 import { ModelSelector } from '@/components/ModelSelector';
 import { OcrConfigPanel } from '@/components/OcrConfigPanel';
 import { Folder } from '@/hooks/useDocuments';
-import { AiModelType, EmbeddingModelType } from '@/hooks/useAiModel';
+import { AiModelType, EmbeddingModelType, PlatformType } from '@/hooks/useAiModel';
 import { OcrConfig } from '@/hooks/useOcrConfig';
 
 interface SidebarContentProps {
@@ -22,6 +22,8 @@ interface SidebarContentProps {
   onModelChange: (model: AiModelType) => void;
   selectedEmbeddingModel: EmbeddingModelType;
   onEmbeddingModelChange: (model: EmbeddingModelType) => void;
+  selectedPlatform: PlatformType;
+  onPlatformChange: (platform: PlatformType) => void;
   ocrConfig: OcrConfig;
   onOcrConfigUpdate: (config: Partial<OcrConfig>) => void;
   readableOcrConfig: any;
@@ -42,6 +44,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
   onModelChange,
   selectedEmbeddingModel,
   onEmbeddingModelChange,
+  selectedPlatform,
+  onPlatformChange,
   ocrConfig,
   onOcrConfigUpdate,
   readableOcrConfig

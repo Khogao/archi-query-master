@@ -1,10 +1,11 @@
-
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAiModel, AiModelType, PlatformType, EmbeddingModelType } from '@/hooks/useAiModel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Info, Download, Loader2, Server, FileText } from 'lucide-react';
+import { Info, Download, Loader2, Server, FileText, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { backendPlatforms, checkSystemRAM } from '@/utils/vectorUtils';
 
 interface ModelSelectorProps {
   value: AiModelType;
@@ -34,6 +35,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const [isInfoOpen, setIsInfoOpen] = React.useState(false);
   const [selectedModelInfo, setSelectedModelInfo] = React.useState(getModelInfo(value));
   const [embeddingModelInfo, setEmbeddingModelInfo] = React.useState<any>(null);
+  const [showRamWarning, setShowRamWarning] = React.useState(false);
+  const [ramCheckResult, setRamCheckResult] = React.useState<{totalRAM: number, warning: boolean}>({ totalRAM: 0, warning: false });
 
   const availablePlatforms = getAvailablePlatforms();
   const filteredModels = getModelsByPlatform(selectedPlatform);
@@ -49,27 +52,77 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     setIsInfoOpen(true);
   };
 
-  const handleLoadModel = async () => {
-    if (value) {
-      await loadModel(value);
-    }
-  };
-
-  const handleLoadEmbeddingModel = async () => {
-    if (embeddingModel) {
-      await loadEmbeddingModel(embeddingModel);
-    }
-  };
-
-  // Khi platform thay đổi, cập nhật model đã chọn nếu cần
   const handlePlatformChange = (platform: PlatformType) => {
     setSelectedPlatform(platform);
     const modelsForPlatform = getModelsByPlatform(platform);
     
-    // Nếu model hiện tại không thuộc platform mới, chọn model đầu tiên của platform đó
     if (!modelsForPlatform.some(model => model.id === value) && modelsForPlatform.length > 0) {
       onValueChange(modelsForPlatform[0].id);
     }
+  };
+
+  const isLargeModel = (modelId: AiModelType): boolean => {
+    const model = models.find(m => m.id === modelId);
+    if (!model) return false;
+    
+    return model.parameters.includes('70B') || 
+           model.parameters.includes('405B') || 
+           parseInt(model.parameters) > 7;
+  };
+
+  useEffect(() => {
+    const checkRam = () => {
+      const ramInfo = checkSystemRAM();
+      setRamCheckResult(ramInfo);
+      setShowRamWarning(ramInfo.warning && isLargeModel(value));
+    };
+    
+    checkRam();
+  }, [value]);
+
+  const handleLoadModel = async () => {
+    if (!value) return;
+    
+    const ramInfo = checkSystemRAM();
+    setRamCheckResult(ramInfo);
+    
+    if (ramInfo.warning && isLargeModel(value)) {
+      setShowRamWarning(true);
+      toast({
+        title: "Cảnh báo RAM",
+        description: `Máy tính của bạn chỉ có ${ramInfo.totalRAM}GB RAM. Model ${value} cần nhiều RAM để chạy hiệu quả.`,
+        variant: "destructive",
+      });
+    }
+    
+    await loadModel(value);
+    
+    const modelInfo = getModelInfo(value);
+    if (!modelInfo) return;
+    
+    const platform = backendPlatforms[modelInfo.platform as keyof typeof backendPlatforms];
+    if (platform) {
+      const response = await platform.callModel("Test connection", value);
+      console.log("Backend response:", response);
+      
+      toast({
+        title: "Đã kết nối backend",
+        description: `Đã thiết lập kết nối với platform ${modelInfo.platform} thành công`,
+      });
+    }
+  };
+
+  const handleLoadEmbeddingModel = async () => {
+    if (!embeddingModel) return;
+    
+    const ramInfo = checkSystemRAM();
+    
+    await loadEmbeddingModel(embeddingModel);
+    
+    toast({
+      title: "Đã tải model embedding",
+      description: `Model embedding ${embeddingModel.split('/').pop()} đã sẵn sàng sử dụng`,
+    });
   };
 
   return (
@@ -173,6 +226,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             </Button>
           </div>
         </div>
+      )}
+
+      {showRamWarning && (
+        <Alert variant="warning" className="bg-amber-50 border-amber-200">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-800">Cảnh báo RAM</AlertTitle>
+          <AlertDescription className="text-amber-700">
+            Máy tính của bạn chỉ có {ramCheckResult.totalRAM}GB RAM. Model này yêu cầu nhiều RAM hơn để chạy hiệu quả.
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="flex gap-2">
