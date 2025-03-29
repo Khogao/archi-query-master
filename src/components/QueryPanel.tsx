@@ -54,11 +54,11 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
         5 // Limit to top 5 results
       );
 
-      // Map vector chunks to result chunks
+      // Map the vector chunks to result chunks with score
       const formattedResults: ResultChunk[] = searchResults.map(chunk => ({
         id: chunk.id,
         text: chunk.text,
-        score: chunk.score,
+        score: chunk.score || 0, // Provide a default value if score is undefined
         documentName: chunk.documentName,
         folderId: chunk.folderId
       }));

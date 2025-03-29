@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAiModel, AiModelType, PlatformType, EmbeddingModelType } from '@/hooks/useAiModel';
@@ -6,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Info, Download, Loader2, Server, FileText, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { backendPlatforms, checkSystemRAM } from '@/utils/vectorUtils';
+import { useToast } from '@/hooks/use-toast';
 
 interface ModelSelectorProps {
   value: AiModelType;
@@ -32,6 +34,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     getAvailablePlatforms,
     getModelsByPlatform
   } = useAiModel();
+  const { toast } = useToast();
   const [isInfoOpen, setIsInfoOpen] = React.useState(false);
   const [selectedModelInfo, setSelectedModelInfo] = React.useState(getModelInfo(value));
   const [embeddingModelInfo, setEmbeddingModelInfo] = React.useState<any>(null);

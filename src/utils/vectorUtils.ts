@@ -10,6 +10,7 @@ export interface VectorChunk {
   documentId: string;
   documentName: string;
   folderId: string;
+  score?: number; // Add score property as optional
 }
 
 // Simple in-memory vector store for demo purposes
