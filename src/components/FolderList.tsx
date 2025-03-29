@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { 
   Folder, 
@@ -134,10 +133,7 @@ export const FolderList: React.FC<FolderListProps> = ({
     }
   };
 
-  // Determine if all folders are selected
   const areAllFoldersSelected = folders.length > 0 && folders.every(folder => folder.isSelected);
-  
-  // Determine if some (but not all) folders are checked
   const areSomeFoldersSelected = folders.some(folder => folder.isSelected) && !areAllFoldersSelected;
 
   const renderFolder = (folder: FolderType) => {
