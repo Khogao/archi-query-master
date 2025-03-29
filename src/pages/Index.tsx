@@ -7,7 +7,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { Upload, Search, Folder } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAiModel, AiModelType } from '@/hooks/useAiModel';
+import { useAiModel } from '@/hooks/useAiModel';
 import { useOcrConfig } from '@/hooks/useOcrConfig';
 import { useDocuments, Folder as FolderType } from '@/hooks/useDocuments';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -27,7 +27,7 @@ const uploadSchema = z.object({
 });
 
 const Index = () => {
-  const [selectedModel, setSelectedModel] = useState<AiModelType>('llama-3.1-sonar-small-128k-online');
+  const [selectedModel, setSelectedModel] = useState<string>('llama-3.1-sonar-small-128k-online');
   const { config: ocrConfig, updateConfig, getReadableConfig } = useOcrConfig();
   const { 
     documents, 
@@ -36,6 +36,10 @@ const Index = () => {
     deleteDocument, 
     addFolder, 
     renameFolder,
+    deleteFolder,
+    toggleFolderSelection,
+    toggleAllFolders,
+    getSelectedFolderIds,
     getDocumentsByFolder,
     getMainFolders,
     getSubFolders,
@@ -73,6 +77,20 @@ const Index = () => {
     uploadForm.setValue("folderId", folderId);
   };
 
+  const handleSearch = () => {
+    if (!chatInput.trim()) return;
+    
+    // Get selected folders for search scope
+    const selectedFolders = getSelectedFolderIds();
+    
+    toast({
+      title: "Đang xử lý",
+      description: selectedFolders.length > 0 
+        ? `Đang tìm kiếm trong ${selectedFolders.length} thư mục đã chọn` 
+        : "Đang tìm kiếm trong tất cả các tài liệu",
+    });
+  };
+
   const currentFolder = getFolderById(selectedFolderId);
   const folderPath = getFolderPath(selectedFolderId);
   const currentFolderDocuments = getDocumentsByFolder(selectedFolderId);
@@ -95,6 +113,9 @@ const Index = () => {
               onFolderSelect={handleFolderSelect}
               onAddFolder={addFolder}
               onRenameFolder={renameFolder}
+              onDeleteFolder={deleteFolder}
+              onToggleFolderSelection={toggleFolderSelection}
+              onToggleAllFolders={toggleAllFolders}
               getSubFolders={getSubFolders}
               getMainFolders={getMainFolders}
             />
@@ -254,16 +275,18 @@ const Index = () => {
                     placeholder="Ví dụ: Thủ tục nộp hồ sơ quy hoạch 1/500 ở Quận 12 TPHCM?"
                     className="flex-1"
                   />
-                  <Button onClick={() => {
-                    if (!chatInput.trim()) return;
-                    toast({
-                      title: "Đang xử lý",
-                      description: "Đang tìm kiếm thông tin từ các tài liệu"
-                    });
-                  }}>
+                  <Button onClick={handleSearch}>
                     <Search className="mr-2 h-4 w-4" />
                     Truy vấn
                   </Button>
+                </div>
+                
+                <div className="mt-4 text-sm text-gray-500">
+                  <p>
+                    {getSelectedFolderIds().length > 0 ? 
+                      `Tìm kiếm trong ${getSelectedFolderIds().length} thư mục đã chọn` : 
+                      "Tìm kiếm trong tất cả tài liệu"}
+                  </p>
                 </div>
               </div>
             </div>

@@ -102,12 +102,12 @@ export const useAiModel = (initialModel: AiModelType = 'llama-3.1-sonar-small-12
       });
       
       // Tải model embedding từ Hugging Face
-      const options = modelId === 'local-embedding-model' ? { quantized: true } : {};
+      const pipelineOptions = modelId === 'local-embedding-model' ? { quantized: true } : {};
       
       const extractor = await pipeline(
         "feature-extraction",
         modelInfo.huggingfaceId,
-        options
+        { revision: "main", ...pipelineOptions }
       );
       
       setEmbeddingPipeline(extractor);

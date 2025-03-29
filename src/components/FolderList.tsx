@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { 
   Folder, 
@@ -9,7 +10,8 @@ import {
   ChevronRight, 
   ChevronDown, 
   Edit, 
-  Plus 
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { Folder as FolderType } from '@/hooks/useDocuments';
 import { z } from 'zod';
@@ -22,6 +24,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface FolderListProps {
   folders: FolderType[];
@@ -29,6 +42,9 @@ interface FolderListProps {
   onFolderSelect: (folderId: string) => void;
   onAddFolder: (name: string, parentId?: string) => void;
   onRenameFolder: (id: string, newName: string) => void;
+  onDeleteFolder: (id: string) => void;
+  onToggleFolderSelection: (id: string) => void;
+  onToggleAllFolders: (selected: boolean) => void;
   getSubFolders: (parentId: string) => FolderType[];
   getMainFolders: () => FolderType[];
 }
@@ -45,6 +61,9 @@ export const FolderList: React.FC<FolderListProps> = ({
   onFolderSelect,
   onAddFolder,
   onRenameFolder,
+  onDeleteFolder,
+  onToggleFolderSelection,
+  onToggleAllFolders,
   getSubFolders,
   getMainFolders
 }) => {
@@ -53,6 +72,7 @@ export const FolderList: React.FC<FolderListProps> = ({
   const [expandedFolders, setExpandedFolders] = useState<string[]>(['standards', 'local-regulations']);
   const [currentParentId, setCurrentParentId] = useState<string | undefined>(undefined);
   const [folderToRename, setFolderToRename] = useState<string | null>(null);
+  const [folderToDelete, setFolderToDelete] = useState<FolderType | null>(null);
   
   const addForm = useForm<z.infer<typeof folderSchema>>({
     resolver: zodResolver(folderSchema),
@@ -104,6 +124,23 @@ export const FolderList: React.FC<FolderListProps> = ({
     setIsRenameFolderOpen(true);
   };
 
+  const handleOpenDeleteFolder = (folder: FolderType) => {
+    setFolderToDelete(folder);
+  };
+
+  const handleDeleteFolder = () => {
+    if (folderToDelete) {
+      onDeleteFolder(folderToDelete.id);
+      setFolderToDelete(null);
+    }
+  };
+
+  // Determine if the "All Folders" checkbox should be checked
+  const areAllFoldersSelected = folders.length > 0 && folders.every(folder => folder.isSelected);
+  
+  // Determine if some (but not all) folders are checked
+  const areSomeFoldersSelected = folders.some(folder => folder.isSelected) && !areAllFoldersSelected;
+
   const renderFolder = (folder: FolderType) => {
     const hasChildren = folder.children && folder.children.length > 0;
     const isExpanded = expandedFolders.includes(folder.id);
@@ -112,6 +149,14 @@ export const FolderList: React.FC<FolderListProps> = ({
     return (
       <div key={folder.id} className="space-y-1">
         <div className="flex items-center">
+          <div className="flex items-center mr-1">
+            <Checkbox 
+              id={`checkbox-${folder.id}`} 
+              checked={folder.isSelected}
+              onCheckedChange={() => onToggleFolderSelection(folder.id)}
+            />
+          </div>
+          
           {hasChildren && (
             <Button 
               variant="ghost" 
@@ -151,6 +196,10 @@ export const FolderList: React.FC<FolderListProps> = ({
                 <Edit className="mr-2 h-4 w-4" />
                 Đổi tên thư mục
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleOpenDeleteFolder(folder)}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Xóa thư mục
+              </DropdownMenuItem>
               {hasChildren && (
                 <DropdownMenuItem onClick={() => handleOpenAddFolder(folder.id)}>
                   <Plus className="mr-2 h-4 w-4" />
@@ -172,6 +221,20 @@ export const FolderList: React.FC<FolderListProps> = ({
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center space-x-2 mb-2">
+        <Checkbox 
+          id="select-all-folders"
+          checked={areAllFoldersSelected}
+          onCheckedChange={(checked) => onToggleAllFolders(!!checked)}
+        />
+        <label 
+          htmlFor="select-all-folders" 
+          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+        >
+          Tất cả Thư mục
+        </label>
+      </div>
+      
       <div className="space-y-1">
         {getMainFolders().map(folder => renderFolder(folder))}
       </div>
@@ -245,6 +308,32 @@ export const FolderList: React.FC<FolderListProps> = ({
           </Form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!folderToDelete} onOpenChange={(open) => !open && setFolderToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa thư mục</AlertDialogTitle>
+            <AlertDialogDescription>
+              {folderToDelete && (
+                <>
+                  Bạn có chắc chắn muốn xóa thư mục "{folderToDelete.name}"?
+                  {folderToDelete.children && folderToDelete.children.length > 0 && (
+                    <p className="mt-2 text-red-500">
+                      Lưu ý: Tất cả thư mục con và tài liệu trong thư mục này cũng sẽ bị xóa.
+                    </p>
+                  )}
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteFolder} className="bg-red-500 hover:bg-red-600">
+              Xóa thư mục
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
