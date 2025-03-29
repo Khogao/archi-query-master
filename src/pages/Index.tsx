@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useAiModel, AiModelType, EmbeddingModelType, PlatformType } from '@/hooks/useAiModel';
@@ -76,10 +75,7 @@ const Index = () => {
   );
 
   const header = (
-    <PageHeader 
-      title="QuerryMaster" 
-      description="Hệ thống truy vấn tài liệu kiến trúc và quy hoạch" 
-    />
+    <PageHeader title="QueryMaster" />
   );
 
   const mainContent = (

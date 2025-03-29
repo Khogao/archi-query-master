@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -29,7 +29,7 @@ export const ResizableSidebar: React.FC<ResizableSidebarProps> = ({ children }) 
   };
 
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+    <>
       <ResizablePanel 
         defaultSize={sidebarWidth} 
         minSize={isCollapsed ? 0 : minWidth} 
@@ -67,10 +67,6 @@ export const ResizableSidebar: React.FC<ResizableSidebarProps> = ({ children }) 
       {!isCollapsed && (
         <ResizableHandle withHandle />
       )}
-      
-      <ResizablePanel defaultSize={isCollapsed ? 100 : 100 - sidebarWidth}>
-        <div className="h-full bg-gray-50 overflow-auto">{/* Main content will be rendered here */}</div>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+    </>
   );
 };

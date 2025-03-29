@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ResizablePanelGroup } from '@/components/ui/resizable';
+import { ResizablePanelGroup, ResizablePanel } from '@/components/ui/resizable';
 import { ResizableSidebar } from '@/components/ResizableSidebar';
 
 interface MainLayoutProps {
@@ -20,14 +20,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         {header}
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal" className="w-full">
+      <div className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal" className="w-full h-full">
           <ResizableSidebar>
             {sidebar}
           </ResizableSidebar>
-          <div className="flex-1 p-6 overflow-auto">
-            {main}
-          </div>
+          <ResizablePanel defaultSize={80} className="bg-gray-50">
+            <div className="p-6 h-full overflow-auto">
+              {main}
+            </div>
+          </ResizablePanel>
         </ResizablePanelGroup>
       </div>
     </div>
