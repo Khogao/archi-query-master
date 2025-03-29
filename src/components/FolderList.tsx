@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { 
   Folder, 
@@ -33,7 +33,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 interface FolderListProps {
@@ -135,7 +134,7 @@ export const FolderList: React.FC<FolderListProps> = ({
     }
   };
 
-  // Determine if the "All Folders" checkbox should be checked
+  // Determine if all folders are selected
   const areAllFoldersSelected = folders.length > 0 && folders.every(folder => folder.isSelected);
   
   // Determine if some (but not all) folders are checked
@@ -221,7 +220,7 @@ export const FolderList: React.FC<FolderListProps> = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center space-x-2 mb-2">
+      <div className="flex items-center space-x-2 mb-4 p-2 bg-gray-50 rounded border">
         <Checkbox 
           id="select-all-folders"
           checked={areAllFoldersSelected}
@@ -229,7 +228,7 @@ export const FolderList: React.FC<FolderListProps> = ({
         />
         <label 
           htmlFor="select-all-folders" 
-          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 select-none cursor-pointer"
         >
           Tất cả Thư mục
         </label>

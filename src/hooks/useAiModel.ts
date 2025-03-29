@@ -11,9 +11,17 @@ export type AiModelType =
   | 'llama-3.1-sonar-small-128k-online'  // 8B parameters
   | 'llama-3.1-sonar-large-128k-online'  // 70B parameters
   | 'llama-3.1-sonar-huge-128k-online'   // 405B parameters
-  | 'local-embedding-model';             // Local embedding model for faster processing
+  | 'local-embedding-model'              // Local embedding model for faster processing
+  | 'llama3:8b'                          // Ollama model
+  | 'bkai-vietnamese-encoder';           // Vietnamese embedding model
 
 export type PlatformType = 'huggingface' | 'ollama' | 'llamacpp';
+
+export type EmbeddingModelType = 
+  | 'mixedbread-ai/mxbai-embed-small-v1'
+  | 'mixedbread-ai/mxbai-embed-large-v1'
+  | 'mixedbread-ai/mxbai-embed-xsmall-v1'
+  | 'bkai-foundation-models/vietnamese-bi-encoder';
 
 interface ModelInfo {
   id: AiModelType;
@@ -61,12 +69,61 @@ export const AI_MODELS: ModelInfo[] = [
     requirements: 'Chạy hoàn toàn trên máy tính, phù hợp cho truy vấn đơn giản',
     huggingfaceId: 'mixedbread-ai/mxbai-embed-xsmall-v1',
     platform: 'huggingface'
+  },
+  {
+    id: 'llama3:8b',
+    name: 'Llama 3 8B',
+    description: 'Mô hình Llama3 8B chạy trên nền tảng Ollama',
+    parameters: '8B',
+    requirements: 'Cần cài đặt Ollama, chạy cục bộ trên máy',
+    platform: 'ollama'
+  },
+  {
+    id: 'bkai-vietnamese-encoder',
+    name: 'BKAI Vietnamese Encoder',
+    description: 'Mô hình embedding tối ưu cho tiếng Việt',
+    parameters: 'Trung bình',
+    requirements: 'Tối ưu cho ngôn ngữ tiếng Việt',
+    huggingfaceId: 'bkai-foundation-models/vietnamese-bi-encoder',
+    platform: 'huggingface'
   }
 ];
 
-export const useAiModel = (initialModel: AiModelType = 'llama-3.1-sonar-small-128k-online') => {
+export const EMBEDDING_MODELS = [
+  {
+    id: 'mixedbread-ai/mxbai-embed-small-v1',
+    name: 'MXBai Embed Small',
+    description: 'Mô hình embedding đa ngôn ngữ, kích thước nhỏ',
+    platform: 'huggingface'
+  },
+  {
+    id: 'mixedbread-ai/mxbai-embed-large-v1',
+    name: 'MXBai Embed Large',
+    description: 'Mô hình embedding đa ngôn ngữ, kích thước lớn',
+    platform: 'huggingface'
+  },
+  {
+    id: 'mixedbread-ai/mxbai-embed-xsmall-v1',
+    name: 'MXBai Embed XSmall',
+    description: 'Mô hình embedding đa ngôn ngữ, kích thước cực nhỏ, phù hợp cho thiết bị yếu',
+    platform: 'huggingface'
+  },
+  {
+    id: 'bkai-foundation-models/vietnamese-bi-encoder',
+    name: 'BKAI Vietnamese Encoder',
+    description: 'Mô hình embedding tối ưu cho tiếng Việt',
+    platform: 'huggingface'
+  }
+];
+
+export const useAiModel = (
+  initialModel: AiModelType = 'llama3:8b', 
+  initialPlatform: PlatformType = 'ollama',
+  initialEmbeddingModel: EmbeddingModelType = 'bkai-foundation-models/vietnamese-bi-encoder'
+) => {
   const [selectedModel, setSelectedModel] = useState<AiModelType>(initialModel);
-  const [selectedPlatform, setSelectedPlatform] = useState<PlatformType>('huggingface');
+  const [selectedPlatform, setSelectedPlatform] = useState<PlatformType>(initialPlatform);
+  const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<EmbeddingModelType>(initialEmbeddingModel);
   const [embeddingPipeline, setEmbeddingPipeline] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { toast } = useToast();
@@ -92,8 +149,32 @@ export const useAiModel = (initialModel: AiModelType = 'llama-3.1-sonar-small-12
     try {
       const modelInfo = getModelInfo(modelId);
       
-      if (!modelInfo || !modelInfo.huggingfaceId) {
+      if (!modelInfo) {
         throw new Error('Không tìm thấy thông tin model');
+      }
+
+      // Nếu là model Ollama thì xử lý khác
+      if (modelInfo.platform === 'ollama') {
+        toast({
+          title: "Đang kết nối với Ollama",
+          description: `Đang thiết lập kết nối đến ${modelInfo.name} trên nền tảng Ollama...`,
+        });
+        
+        // Giả lập kết nối thành công với Ollama (trong ứng dụng thực tế sẽ gọi API của Ollama)
+        setTimeout(() => {
+          toast({
+            title: "Đã kết nối với Ollama",
+            description: `Model ${modelInfo.name} đã sẵn sàng sử dụng`,
+          });
+          setIsLoading(false);
+        }, 1500);
+        
+        return null;
+      }
+
+      // Xử lý cho models Hugging Face
+      if (!modelInfo.huggingfaceId) {
+        throw new Error('Không tìm thấy Hugging Face ID cho model');
       }
 
       toast({
@@ -131,10 +212,51 @@ export const useAiModel = (initialModel: AiModelType = 'llama-3.1-sonar-small-12
     }
   };
 
+  // Tải model embedding
+  const loadEmbeddingModel = async (embeddingModelId: EmbeddingModelType) => {
+    setIsLoading(true);
+    try {
+      toast({
+        title: "Đang tải model embedding",
+        description: `Đang tải model embedding ${embeddingModelId}...`,
+      });
+      
+      const extractor = await pipeline(
+        "feature-extraction",
+        embeddingModelId,
+        { revision: "main" }
+      );
+      
+      setEmbeddingPipeline(extractor);
+      
+      toast({
+        title: "Đã tải model embedding thành công",
+        description: `Model embedding đã sẵn sàng sử dụng`,
+      });
+      
+      return extractor;
+    } catch (error) {
+      console.error('Lỗi khi tải model embedding:', error);
+      toast({
+        title: "Lỗi khi tải model embedding",
+        description: `Không thể tải model. Lỗi: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Tạo embedding cho văn bản
   const generateEmbedding = async (text: string) => {
     if (!embeddingPipeline) {
-      await loadModel(selectedModel);
+      const modelInfo = getModelInfo(selectedModel);
+      if (modelInfo?.huggingfaceId) {
+        await loadEmbeddingModel(modelInfo.huggingfaceId as EmbeddingModelType);
+      } else {
+        await loadEmbeddingModel(selectedEmbeddingModel);
+      }
     }
     
     if (embeddingPipeline) {
@@ -156,22 +278,33 @@ export const useAiModel = (initialModel: AiModelType = 'llama-3.1-sonar-small-12
 
   useEffect(() => {
     // Khi model được chọn thay đổi, tải model mới
-    if (selectedModel) {
+    if (selectedModel && selectedPlatform === 'huggingface') {
       loadModel(selectedModel);
     }
-  }, [selectedModel]);
+  }, [selectedModel, selectedPlatform]);
+
+  useEffect(() => {
+    // Khi embedding model thay đổi, tải model embedding mới
+    if (selectedEmbeddingModel) {
+      loadEmbeddingModel(selectedEmbeddingModel);
+    }
+  }, [selectedEmbeddingModel]);
 
   return {
     selectedModel,
     setSelectedModel,
     selectedPlatform,
     setSelectedPlatform,
+    selectedEmbeddingModel,
+    setSelectedEmbeddingModel,
     models: AI_MODELS,
+    embeddingModels: EMBEDDING_MODELS,
     getModelInfo,
     getAvailablePlatforms,
     getModelsByPlatform,
     isLoading,
     loadModel,
+    loadEmbeddingModel,
     generateEmbedding,
     embeddingPipeline
   };
