@@ -1,4 +1,3 @@
-
 import { VectorChunk } from './vectorUtils';
 import { addChunksToVectorStore } from './vectorStoreUtils';
 
@@ -251,8 +250,8 @@ async function processChunks(
         throw new Error('Không thể tạo embedding cho đoạn văn bản');
       }
       
-      // Convert to array of numbers
-      const embedding = Array.from(result.data);
+      // Convert to array of numbers with proper type assertion
+      const embedding = Array.from(result.data) as number[];
       
       // Create vector chunk
       vectorChunks.push({

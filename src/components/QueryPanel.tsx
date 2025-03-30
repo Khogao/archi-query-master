@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useAiModel } from '@/hooks/useAiModel';
+import { useAiModel, EmbeddingModelType } from '@/hooks/useAiModel';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import { searchSimilarChunks } from '@/utils/vectorUtils';
 interface QueryPanelProps {
   getSelectedFolderIds: () => string[];
   selectedModel: string;
-  selectedEmbeddingModel: string;
+  selectedEmbeddingModel: EmbeddingModelType; // Make sure this is the correct type
   selectedPlatform: string;
 }
 

@@ -1,4 +1,3 @@
-
 import React, { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -15,6 +14,13 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { useAiModel } from '@/hooks/useAiModel';
 import { processDocument } from '@/utils/documentProcessor';
+
+declare module 'react' {
+  interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
+    webkitdirectory?: string;
+    directory?: string;
+  }
+}
 
 const uploadSchema = z.object({
   name: z.string().min(3, { message: "Tên tài liệu phải có ít nhất 3 ký tự" }),
@@ -69,7 +75,6 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
     }
   });
 
-  // Update form when selectedFolderId changes
   React.useEffect(() => {
     uploadForm.setValue("folderId", selectedFolderId);
   }, [selectedFolderId, uploadForm]);
@@ -82,7 +87,6 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
       const file = values.file[0];
       setProcessingFile(file.name);
       
-      // Ensure the embedding model is loaded
       if (!embeddingPipeline) {
         toast({
           title: "Đang tải model embedding",
@@ -91,12 +95,10 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
         await loadEmbeddingModel(selectedEmbeddingModel);
       }
       
-      // Process the document
       const result = await processDocument(file, values.folderId, values.name, (progress) => {
         setProcessingProgress(progress);
       }, embeddingPipeline);
       
-      // Add the document to the UI list
       const newDoc = {
         name: values.name,
         type: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
@@ -138,7 +140,6 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
       setIsProcessing(true);
       setProcessingProgress(0);
       
-      // Ensure the embedding model is loaded
       if (!embeddingPipeline) {
         toast({
           title: "Đang tải model embedding",
@@ -161,16 +162,13 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
         setProcessingFile(file.name);
         
         try {
-          // Process the document
           const result = await processDocument(file, selectedFolderId, file.name, (progress) => {
-            // Calculate overall progress (current file progress + completed files)
             const overallProgress = ((processedFiles + progress / 100) / totalFiles) * 100;
             setProcessingProgress(overallProgress);
           }, embeddingPipeline);
           
           totalChunks += result.chunks;
           
-          // Add the document to the UI list
           const newDoc = {
             name: file.name,
             type: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
@@ -182,7 +180,6 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
           
           processedFiles++;
           
-          // Update progress toast every few files
           if (processedFiles % 3 === 0 || processedFiles === totalFiles) {
             toast({
               title: `Đã xử lý ${processedFiles}/${totalFiles} tệp tin`,
@@ -216,19 +213,16 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
     }
   };
 
-  // File input change handler
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
       const file = files[0];
       
-      // Auto-detect file type
       let fileType: "pdf" | "docx" = "pdf";
       if (file.name.toLowerCase().endsWith('.docx')) {
         fileType = "docx";
       }
       
-      // Auto-fill name (without extension)
       const fileName = file.name.replace(/\.[^/.]+$/, "");
       
       uploadForm.setValue("name", fileName);

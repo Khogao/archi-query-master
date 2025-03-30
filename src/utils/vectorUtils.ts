@@ -1,5 +1,3 @@
-
-import { pipeline } from '@huggingface/transformers';
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 
 // Fallback model that's known to work reliably
@@ -131,19 +129,26 @@ export const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
-// Search for similar chunks in the vector store with improved error handling
-export const searchSimilarChunks = async (
-  query: string, 
-  modelId: EmbeddingModelType,
-  folderIds: string[] = [], 
+/**
+ * Search for similar chunks
+ * @param query The search query
+ * @param embeddingModelId The embedding model to use
+ * @param folderIds List of folder IDs to filter by (if empty, search all)
+ * @param limit Maximum number of results to return
+ * @returns Array of chunks sorted by similarity
+ */
+export async function searchSimilarChunks(
+  query: string,
+  embeddingModelId: EmbeddingModelType,
+  folderIds: string[] = [],
   limit: number = 5
-): Promise<VectorChunk[]> => {
+): Promise<VectorChunk[]> {
   try {
-    console.log(`Searching for similar chunks with model: ${modelId}`);
+    console.log(`Searching for similar chunks with model: ${embeddingModelId}`);
     console.log(`Folders to search: ${folderIds.length > 0 ? folderIds.join(', ') : 'All folders'}`);
     
     // Generate embedding for the query
-    const queryEmbedding = await generateEmbedding(query, modelId);
+    const queryEmbedding = await generateEmbedding(query, embeddingModelId);
     
     // Filter by folders if specified
     let filteredChunks = inMemoryVectorStore;
@@ -166,8 +171,8 @@ export const searchSimilarChunks = async (
     // Return top N results
     return scoredChunks.slice(0, limit);
   } catch (error) {
-    console.error('Error searching similar chunks:', error);
-    return [];
+    console.error('Error searching for similar chunks:', error);
+    throw new Error('Failed to search for similar chunks');
   }
 };
 
