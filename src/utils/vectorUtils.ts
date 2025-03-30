@@ -1,3 +1,4 @@
+
 import { pipeline } from '@huggingface/transformers';
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 
@@ -71,8 +72,9 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       modelId,
       { 
         revision: "main",
-        progress_callback: (progress) => {
-          console.log(`Loading embedding model: ${Math.round(progress.progress * 100)}%`);
+        progress_callback: (progressInfo) => {
+          // Access status.progress instead of progress directly
+          console.log(`Loading embedding model: ${Math.round(progressInfo.status?.percentage || 0)}%`);
         }
       }
     );

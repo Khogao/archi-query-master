@@ -205,8 +205,8 @@ export const useAiModel = (
           { 
             revision: "main", 
             ...pipelineOptions,
-            progress_callback: (progress) => {
-              console.log(`Loading model: ${Math.round(progress.progress * 100)}%`);
+            progress_callback: (progressInfo) => {
+              console.log(`Loading model: ${Math.round(progressInfo.status?.percentage || 0)}%`);
             }
           }
         );
@@ -226,7 +226,7 @@ export const useAiModel = (
         toast({
           title: "Đang tải model thay thế",
           description: `Model chính không khả dụng, đang tải model thay thế...`,
-          variant: "warning",
+          variant: "default",
         });
         
         const fallbackExtractor = await pipeline(
@@ -234,8 +234,8 @@ export const useAiModel = (
           FALLBACK_MODEL,
           { 
             revision: "main",
-            progress_callback: (progress) => {
-              console.log(`Loading fallback model: ${Math.round(progress.progress * 100)}%`);
+            progress_callback: (progressInfo) => {
+              console.log(`Loading fallback model: ${Math.round(progressInfo.status?.percentage || 0)}%`);
             }
           }
         );
@@ -312,8 +312,8 @@ export const useAiModel = (
           embeddingModelId,
           { 
             revision: "main",
-            progress_callback: (progress) => {
-              console.log(`Loading embedding model: ${Math.round(progress.progress * 100)}%`);
+            progress_callback: (progressInfo) => {
+              console.log(`Loading embedding model: ${Math.round(progressInfo.status?.percentage || 0)}%`);
             }
           }
         );
@@ -333,7 +333,7 @@ export const useAiModel = (
         toast({
           title: "Đang tải model dự phòng",
           description: "Model embedding yêu cầu không khả dụng, đang tải model dự phòng...",
-          variant: "warning",
+          variant: "default",
         });
         
         const fallbackExtractor = await pipeline(
@@ -389,7 +389,7 @@ export const useAiModel = (
         toast({
           title: "Đang thử lại với model dự phòng",
           description: "Đang tải model embedding dự phòng...",
-          variant: "warning",
+          variant: "default",
         });
         
         try {
