@@ -1,4 +1,5 @@
 import { EmbeddingModelType } from '@/hooks/useAiModel';
+import { pipeline } from '@huggingface/transformers';
 
 // Fallback model that's known to work reliably
 const FALLBACK_MODEL = 'Xenova/all-MiniLM-L6-v2';
