@@ -1,96 +1,85 @@
 
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search, Loader2 } from 'lucide-react';
+import { useAiModel } from '@/hooks/useAiModel';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { SearchIcon, Loader2 } from 'lucide-react';
 import { QueryResults, ResultChunk } from '@/components/QueryResults';
 import { searchSimilarChunks } from '@/utils/vectorUtils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Progress } from '@/components/ui/progress';
-import { AiModelType, EmbeddingModelType, PlatformType, useAiModel } from '@/hooks/useAiModel';
 
 interface QueryPanelProps {
   getSelectedFolderIds: () => string[];
-  selectedModel: AiModelType;
-  selectedEmbeddingModel: EmbeddingModelType;
-  selectedPlatform: PlatformType;
+  selectedModel: string;
+  selectedEmbeddingModel: string;
+  selectedPlatform: string;
 }
 
-export const QueryPanel: React.FC<QueryPanelProps> = ({ 
+export const QueryPanel: React.FC<QueryPanelProps> = ({
   getSelectedFolderIds,
   selectedModel,
   selectedEmbeddingModel,
   selectedPlatform
 }) => {
-  const [chatInput, setChatInput] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const [query, setQuery] = useState('');
   const [results, setResults] = useState<ResultChunk[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchProgress, setSearchProgress] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
   const { toast } = useToast();
   const { 
-    callModel, 
-    isLoading, 
-    isModelLoaded,
-    loadModel,
-    checkRamForModel,
-    isLargeModel
-  } = useAiModel(selectedModel, selectedPlatform, selectedEmbeddingModel);
-
-  // Handle RAM check when component loads
-  React.useEffect(() => {
-    if (isLargeModel(selectedModel)) {
-      checkRamForModel(selectedModel);
-    }
-  }, [selectedModel]);
+    embeddingPipeline, 
+    loadEmbeddingModel, 
+    callModel,
+    isLoading 
+  } = useAiModel();
 
   const handleSearch = async () => {
-    if (!chatInput.trim()) return;
-    
-    // Get selected folders for search scope
-    const selectedFolders = getSelectedFolderIds();
-    setSearchQuery(chatInput);
-    
-    toast({
-      title: "Đang xử lý",
-      description: selectedFolders.length > 0 
-        ? `Đang tìm kiếm trong ${selectedFolders.length} thư mục đã chọn` 
-        : "Đang tìm kiếm trong tất cả các tài liệu",
-    });
-
-    setIsSearching(true);
-    setResults([]);
-    setSearchProgress(10); // Start progress
+    if (!query.trim()) {
+      toast({
+        title: "Vui lòng nhập truy vấn",
+        description: "Hãy nhập nội dung truy vấn để tìm kiếm thông tin",
+        variant: "default",
+      });
+      return;
+    }
 
     try {
-      // Simulate progress steps
-      const updateProgress = () => {
-        setSearchProgress(prev => {
-          const increment = Math.floor(Math.random() * 15) + 5; // Random increment between 5-20
-          return Math.min(prev + increment, 90); // Cap at 90% until complete
+      setIsSearching(true);
+      setResults([]);
+
+      // Get selected folders
+      const selectedFolderIds = getSelectedFolderIds();
+      if (selectedFolderIds.length === 0) {
+        toast({
+          title: "Chưa chọn thư mục",
+          description: "Vui lòng chọn ít nhất một thư mục để tìm kiếm",
+          variant: "default",
         });
-      };
-      
-      // Set up progress updates
-      const progressInterval = setInterval(updateProgress, 300);
-      
-      // Perform vector search
+        setIsSearching(false);
+        return;
+      }
+
+      // Ensure we have an embedding model loaded
+      if (!embeddingPipeline) {
+        toast({
+          title: "Đang tải model embedding",
+          description: "Vui lòng đợi trong khi model embedding đang được tải...",
+        });
+        await loadEmbeddingModel(selectedEmbeddingModel);
+      }
+
+      // Search for similar chunks
       const searchResults = await searchSimilarChunks(
-        chatInput,
+        query,
         selectedEmbeddingModel,
-        selectedFolders,
-        5 // Limit to top 5 results
+        selectedFolderIds,
+        10 // Get top 10 results
       );
 
-      clearInterval(progressInterval);
-      setSearchProgress(100); // Complete progress
-
-      // Map the vector chunks to result chunks with score
+      // Convert to ResultChunk format
       const formattedResults: ResultChunk[] = searchResults.map(chunk => ({
         id: chunk.id,
         text: chunk.text,
-        score: chunk.score || 0, // Provide a default value if score is undefined
+        score: chunk.score || 0,
         documentName: chunk.documentName,
         folderId: chunk.folderId
       }));
@@ -100,137 +89,65 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
       if (formattedResults.length === 0) {
         toast({
           title: "Không tìm thấy kết quả",
-          description: "Không tìm thấy tài liệu phù hợp với truy vấn của bạn",
-          variant: "destructive"
+          description: "Không tìm thấy kết quả phù hợp với truy vấn của bạn",
+          variant: "default",
         });
       } else {
         toast({
           title: "Tìm kiếm hoàn tất",
           description: `Đã tìm thấy ${formattedResults.length} kết quả phù hợp`,
         });
-        
-        // If model is loaded, we could optionally generate an answer
-        if (isModelLoaded) {
-          // Prepare context from search results
-          const context = formattedResults
-            .map(r => `[${r.documentName}]: ${r.text}`)
-            .join('\n\n');
-          
-          // Define prompt with context and query
-          const prompt = `Dựa trên các đoạn trích sau đây:
-          
-${context}
-
-Hãy trả lời câu hỏi sau một cách ngắn gọn: "${chatInput}"`;
-          
-          // Call the model asynchronously (we don't wait for this)
-          callModel(prompt).then(response => {
-            if (response) {
-              console.log("Model response:", response);
-              // Could display this in the UI if wanted
-            }
-          });
-        }
       }
     } catch (error) {
-      console.error('Error searching documents:', error);
+      console.error('Error searching for documents:', error);
       toast({
-        title: "Lỗi tìm kiếm",
-        description: "Đã xảy ra lỗi khi tìm kiếm tài liệu",
-        variant: "destructive"
+        title: "Lỗi khi tìm kiếm",
+        description: error instanceof Error ? error.message : "Có lỗi xảy ra khi thực hiện tìm kiếm",
+        variant: "destructive",
       });
     } finally {
       setIsSearching(false);
-      // Reset progress after a delay
-      setTimeout(() => setSearchProgress(0), 500);
     }
   };
 
-  const handleLoadModel = async () => {
-    // Check RAM requirements first
-    checkRamForModel(selectedModel);
-    
-    // Load the selected model
-    await loadModel(selectedModel);
-    
-    toast({
-      title: "Model đã sẵn sàng",
-      description: `Model ${selectedModel} đã được tải và sẵn sàng sử dụng`,
-    });
-  };
-
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Truy vấn thông tin</h2>
-      <div className="bg-white p-6 rounded-lg shadow">
-        <p className="mb-4 text-gray-600">Đặt câu hỏi về các quy định kiến trúc, quy hoạch hoặc pháp lý xây dựng:</p>
-        <div className="flex gap-2">
-          <Input 
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            placeholder="Ví dụ: Thủ tục nộp hồ sơ quy hoạch 1/500 ở Quận 12 TPHCM?"
-            className="flex-1"
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          />
-          <Button onClick={handleSearch} disabled={isSearching}>
+    <div className="mt-8">
+      <h2 className="text-xl font-semibold mb-4">Truy vấn tài liệu</h2>
+      
+      <div className="space-y-4">
+        <Textarea
+          placeholder="Nhập câu hỏi hoặc từ khóa để tìm kiếm trong tài liệu..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="min-h-[100px]"
+        />
+        
+        <div className="flex justify-end">
+          <Button 
+            onClick={handleSearch} 
+            disabled={isSearching || isLoading}
+            className="gap-2"
+          >
             {isSearching ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Đang truy vấn...
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Đang xử lý...
               </>
             ) : (
               <>
-                <Search className="mr-2 h-4 w-4" />
+                <SearchIcon className="h-4 w-4" />
                 Truy vấn
               </>
             )}
           </Button>
         </div>
-        
-        {isSearching && searchProgress > 0 && (
-          <div className="mt-2">
-            <Progress value={searchProgress} className="h-2" />
-            <p className="text-xs text-gray-500 mt-1">Đang tìm kiếm: {searchProgress}%</p>
-          </div>
-        )}
-        
-        <div className="mt-4 text-sm text-gray-500">
-          <div className="flex justify-between items-center">
-            <p>
-              {getSelectedFolderIds().length > 0 ? 
-                `Tìm kiếm trong ${getSelectedFolderIds().length} thư mục đã chọn` : 
-                "Tìm kiếm trong tất cả tài liệu"}
-            </p>
-            
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleLoadModel}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                  Đang tải...
-                </>
-              ) : (
-                'Tải model về máy'
-              )}
-            </Button>
-          </div>
-          
-          <p className="mt-1">
-            Model: {selectedModel} | Platform: {selectedPlatform} | Embedding: {selectedEmbeddingModel.split('/').pop()}
-          </p>
-        </div>
-
-        {/* Results display */}
-        <QueryResults 
-          isLoading={isSearching} 
-          results={results}
-          query={searchQuery}
-        />
       </div>
+      
+      <QueryResults 
+        isLoading={isSearching} 
+        results={results} 
+        query={query}
+      />
     </div>
   );
 };

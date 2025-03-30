@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
@@ -7,10 +7,14 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Input } from '@/components/ui/input';
-import { Upload, Folder } from 'lucide-react';
+import { Upload, Folder, AlertTriangle, FileText, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DocumentList } from '@/components/DocumentList';
 import { Folder as FolderType } from '@/hooks/useDocuments';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { useAiModel } from '@/hooks/useAiModel';
+import { processDocument } from '@/utils/documentProcessor';
 
 const uploadSchema = z.object({
   name: z.string().min(3, { message: "Tên tài liệu phải có ít nhất 3 ký tự" }),
@@ -19,9 +23,14 @@ const uploadSchema = z.object({
     invalid_type_error: "Loại tài liệu không hợp lệ"
   }),
   folderId: z.string(),
+  file: z.instanceof(FileList).refine(files => files.length > 0, {
+    message: "Vui lòng chọn một tệp tin"
+  })
 });
 
-type UploadFormValues = z.infer<typeof uploadSchema>;
+type UploadFormValues = Omit<z.infer<typeof uploadSchema>, 'file'> & {
+  file: FileList;
+};
 
 interface DocumentManagementProps {
   selectedFolderId: string;
@@ -43,7 +52,13 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
   folders
 }) => {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = React.useState(false);
+  const [isProcessing, setIsProcessing] = React.useState(false);
+  const [processingProgress, setProcessingProgress] = React.useState(0);
+  const [processingFile, setProcessingFile] = React.useState('');
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const { embeddingPipeline, selectedEmbeddingModel, loadEmbeddingModel } = useAiModel();
   
   const uploadForm = useForm<UploadFormValues>({
     resolver: zodResolver(uploadSchema),
@@ -59,15 +74,167 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
     uploadForm.setValue("folderId", selectedFolderId);
   }, [selectedFolderId, uploadForm]);
 
-  const handleUploadSubmit = (values: UploadFormValues) => {
-    addDocument({
-      name: values.name,
-      type: values.type,
-      size: "1.2 MB", // In a real app, we'd get the actual file size
-      folderId: values.folderId
-    });
-    uploadForm.reset();
-    setIsUploadDialogOpen(false);
+  const handleUploadSubmit = async (values: UploadFormValues) => {
+    try {
+      setIsProcessing(true);
+      setProcessingProgress(0);
+      
+      const file = values.file[0];
+      setProcessingFile(file.name);
+      
+      // Ensure the embedding model is loaded
+      if (!embeddingPipeline) {
+        toast({
+          title: "Đang tải model embedding",
+          description: "Vui lòng đợi trong khi model embedding đang được tải...",
+        });
+        await loadEmbeddingModel(selectedEmbeddingModel);
+      }
+      
+      // Process the document
+      const result = await processDocument(file, values.folderId, values.name, (progress) => {
+        setProcessingProgress(progress);
+      }, embeddingPipeline);
+      
+      // Add the document to the UI list
+      const newDoc = {
+        name: values.name,
+        type: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
+        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        folderId: values.folderId
+      };
+      
+      addDocument(newDoc);
+      
+      toast({
+        title: "Tải lên thành công",
+        description: `Đã xử lý ${result.chunks} đoạn văn bản từ "${values.name}"`,
+      });
+    } catch (error) {
+      console.error('Error processing document:', error);
+      toast({
+        title: "Lỗi khi xử lý tài liệu",
+        description: error instanceof Error ? error.message : "Có lỗi xảy ra khi xử lý tài liệu",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      uploadForm.reset();
+      setIsUploadDialogOpen(false);
+    }
+  };
+
+  const handleFolderUpload = async () => {
+    if (folderInputRef.current) {
+      folderInputRef.current.click();
+    }
+  };
+
+  const handleFolderSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    
+    try {
+      setIsProcessing(true);
+      setProcessingProgress(0);
+      
+      // Ensure the embedding model is loaded
+      if (!embeddingPipeline) {
+        toast({
+          title: "Đang tải model embedding",
+          description: "Vui lòng đợi trong khi model embedding đang được tải...",
+        });
+        await loadEmbeddingModel(selectedEmbeddingModel);
+      }
+      
+      const totalFiles = files.length;
+      let processedFiles = 0;
+      let totalChunks = 0;
+      
+      toast({
+        title: "Bắt đầu xử lý thư mục",
+        description: `Đang xử lý ${totalFiles} tệp tin...`,
+      });
+      
+      for (let i = 0; i < totalFiles; i++) {
+        const file = files[i];
+        setProcessingFile(file.name);
+        
+        try {
+          // Process the document
+          const result = await processDocument(file, selectedFolderId, file.name, (progress) => {
+            // Calculate overall progress (current file progress + completed files)
+            const overallProgress = ((processedFiles + progress / 100) / totalFiles) * 100;
+            setProcessingProgress(overallProgress);
+          }, embeddingPipeline);
+          
+          totalChunks += result.chunks;
+          
+          // Add the document to the UI list
+          const newDoc = {
+            name: file.name,
+            type: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
+            size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+            folderId: selectedFolderId
+          };
+          
+          addDocument(newDoc);
+          
+          processedFiles++;
+          
+          // Update progress toast every few files
+          if (processedFiles % 3 === 0 || processedFiles === totalFiles) {
+            toast({
+              title: `Đã xử lý ${processedFiles}/${totalFiles} tệp tin`,
+              description: `Đã trích xuất ${totalChunks} đoạn văn bản`,
+            });
+          }
+        } catch (fileError) {
+          console.error(`Error processing file ${file.name}:`, fileError);
+          toast({
+            title: `Lỗi khi xử lý tệp tin ${file.name}`,
+            description: fileError instanceof Error ? fileError.message : "Có lỗi xảy ra",
+            variant: "destructive",
+          });
+        }
+      }
+      
+      toast({
+        title: "Xử lý thư mục hoàn tất",
+        description: `Đã xử lý ${processedFiles}/${totalFiles} tệp tin và trích xuất ${totalChunks} đoạn văn bản`,
+      });
+    } catch (error) {
+      console.error('Error processing folder:', error);
+      toast({
+        title: "Lỗi khi xử lý thư mục",
+        description: error instanceof Error ? error.message : "Có lỗi xảy ra khi xử lý thư mục",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      if (folderInputRef.current) folderInputRef.current.value = '';
+    }
+  };
+
+  // File input change handler
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      
+      // Auto-detect file type
+      let fileType: "pdf" | "docx" = "pdf";
+      if (file.name.toLowerCase().endsWith('.docx')) {
+        fileType = "docx";
+      }
+      
+      // Auto-fill name (without extension)
+      const fileName = file.name.replace(/\.[^/.]+$/, "");
+      
+      uploadForm.setValue("name", fileName);
+      uploadForm.setValue("type", fileType);
+      uploadForm.setValue("file", files);
+    }
   };
 
   return (
@@ -87,10 +254,26 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
         ))}
       </div>
       
+      {isProcessing && (
+        <Alert className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Đang xử lý tài liệu</AlertTitle>
+          <AlertDescription>
+            <div className="mt-2">
+              <div className="flex justify-between mb-1">
+                <span>Đang xử lý: {processingFile}</span>
+                <span>{Math.round(processingProgress)}%</span>
+              </div>
+              <Progress value={processingProgress} className="h-2" />
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <div className="flex gap-4 mb-4">
         <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline">
+            <Button variant="outline" disabled={isProcessing}>
               <Upload className="mr-2 h-4 w-4" />
               Tải lên tài liệu
             </Button>
@@ -101,6 +284,37 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
             </DialogHeader>
             <Form {...uploadForm}>
               <form onSubmit={uploadForm.handleSubmit(handleUploadSubmit)} className="space-y-4">
+                <FormField
+                  control={uploadForm.control}
+                  name="file"
+                  render={({ field: { onChange, value, ...rest } }) => (
+                    <FormItem>
+                      <FormLabel>Chọn tệp tin</FormLabel>
+                      <FormControl>
+                        <div className="flex flex-col gap-2">
+                          <Input 
+                            ref={fileInputRef}
+                            type="file" 
+                            accept=".pdf,.docx"
+                            onChange={(e) => {
+                              onChange(e.target.files);
+                              handleFileChange(e);
+                            }}
+                            {...rest}
+                          />
+                          {value && value[0] && (
+                            <div className="flex items-center text-sm text-green-600">
+                              <Check className="mr-1 h-4 w-4" />
+                              <span>{value[0].name} ({(value[0].size / 1024).toFixed(1)} KB)</span>
+                            </div>
+                          )}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
                 <FormField
                   control={uploadForm.control}
                   name="name"
@@ -128,6 +342,7 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
                           onClick={() => uploadForm.setValue("type", "pdf")}
                           className="flex-1"
                         >
+                          <FileText className="mr-2 h-4 w-4" />
                           PDF
                         </Button>
                         <Button
@@ -136,6 +351,7 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
                           onClick={() => uploadForm.setValue("type", "docx")}
                           className="flex-1"
                         >
+                          <FileText className="mr-2 h-4 w-4" />
                           DOCX
                         </Button>
                       </div>
@@ -170,19 +386,37 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
                 />
                 
                 <div className="flex justify-end">
-                  <Button type="submit">Tải lên</Button>
+                  <Button type="submit" disabled={isProcessing}>
+                    {isProcessing ? (
+                      <>Đang xử lý...</>
+                    ) : (
+                      <>Tải lên</>
+                    )}
+                  </Button>
                 </div>
               </form>
             </Form>
           </DialogContent>
         </Dialog>
-        <Button variant="outline" onClick={() => toast({
-          title: "Tính năng đang phát triển",
-          description: "Chức năng nhập thư mục đang được phát triển"
-        })}>
+        
+        <Button 
+          variant="outline" 
+          onClick={handleFolderUpload}
+          disabled={isProcessing}
+        >
           <Folder className="mr-2 h-4 w-4" />
           Nhập thư mục
         </Button>
+        
+        <input
+          ref={folderInputRef}
+          type="file"
+          webkitdirectory="true"
+          directory=""
+          multiple
+          className="hidden"
+          onChange={handleFolderSelected}
+        />
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">

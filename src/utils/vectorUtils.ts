@@ -1,3 +1,4 @@
+
 import { pipeline } from '@huggingface/transformers';
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 
@@ -17,7 +18,7 @@ export interface VectorChunk {
 
 // Simple in-memory vector store for demo purposes
 // In a real application, this would be persisted to IndexedDB or similar
-let inMemoryVectorStore: VectorChunk[] = [
+export let inMemoryVectorStore: VectorChunk[] = [
   {
     id: 'chunk1',
     text: 'Quy chuẩn về chiều cao tối thiểu của tầng 1 các công trình dân dụng tại TP.HCM là 3.6m tính từ mặt nền đến trần. Riêng đối với nhà ở riêng lẻ, chiều cao tối thiểu có thể là 3.2m.',
