@@ -2,12 +2,13 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { QueryResults, ResultChunk } from '@/components/QueryResults';
 import { searchSimilarChunks } from '@/utils/vectorUtils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AiModelType, EmbeddingModelType, PlatformType } from '@/hooks/useAiModel';
+import { Progress } from '@/components/ui/progress';
+import { AiModelType, EmbeddingModelType, PlatformType, useAiModel } from '@/hooks/useAiModel';
 
 interface QueryPanelProps {
   getSelectedFolderIds: () => string[];
@@ -26,7 +27,23 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<ResultChunk[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchProgress, setSearchProgress] = useState(0);
   const { toast } = useToast();
+  const { 
+    callModel, 
+    isLoading, 
+    isModelLoaded,
+    loadModel,
+    checkRamForModel,
+    isLargeModel
+  } = useAiModel(selectedModel, selectedPlatform, selectedEmbeddingModel);
+
+  // Handle RAM check when component loads
+  React.useEffect(() => {
+    if (isLargeModel(selectedModel)) {
+      checkRamForModel(selectedModel);
+    }
+  }, [selectedModel]);
 
   const handleSearch = async () => {
     if (!chatInput.trim()) return;
@@ -44,8 +61,20 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
 
     setIsSearching(true);
     setResults([]);
+    setSearchProgress(10); // Start progress
 
     try {
+      // Simulate progress steps
+      const updateProgress = () => {
+        setSearchProgress(prev => {
+          const increment = Math.floor(Math.random() * 15) + 5; // Random increment between 5-20
+          return Math.min(prev + increment, 90); // Cap at 90% until complete
+        });
+      };
+      
+      // Set up progress updates
+      const progressInterval = setInterval(updateProgress, 300);
+      
       // Perform vector search
       const searchResults = await searchSimilarChunks(
         chatInput,
@@ -53,6 +82,9 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
         selectedFolders,
         5 // Limit to top 5 results
       );
+
+      clearInterval(progressInterval);
+      setSearchProgress(100); // Complete progress
 
       // Map the vector chunks to result chunks with score
       const formattedResults: ResultChunk[] = searchResults.map(chunk => ({
@@ -76,6 +108,29 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
           title: "Tìm kiếm hoàn tất",
           description: `Đã tìm thấy ${formattedResults.length} kết quả phù hợp`,
         });
+        
+        // If model is loaded, we could optionally generate an answer
+        if (isModelLoaded) {
+          // Prepare context from search results
+          const context = formattedResults
+            .map(r => `[${r.documentName}]: ${r.text}`)
+            .join('\n\n');
+          
+          // Define prompt with context and query
+          const prompt = `Dựa trên các đoạn trích sau đây:
+          
+${context}
+
+Hãy trả lời câu hỏi sau một cách ngắn gọn: "${chatInput}"`;
+          
+          // Call the model asynchronously (we don't wait for this)
+          callModel(prompt).then(response => {
+            if (response) {
+              console.log("Model response:", response);
+              // Could display this in the UI if wanted
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Error searching documents:', error);
@@ -86,7 +141,22 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
       });
     } finally {
       setIsSearching(false);
+      // Reset progress after a delay
+      setTimeout(() => setSearchProgress(0), 500);
     }
+  };
+
+  const handleLoadModel = async () => {
+    // Check RAM requirements first
+    checkRamForModel(selectedModel);
+    
+    // Load the selected model
+    await loadModel(selectedModel);
+    
+    toast({
+      title: "Model đã sẵn sàng",
+      description: `Model ${selectedModel} đã được tải và sẵn sàng sử dụng`,
+    });
   };
 
   return (
@@ -103,17 +173,52 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           />
           <Button onClick={handleSearch} disabled={isSearching}>
-            <Search className="mr-2 h-4 w-4" />
-            {isSearching ? 'Đang truy vấn...' : 'Truy vấn'}
+            {isSearching ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Đang truy vấn...
+              </>
+            ) : (
+              <>
+                <Search className="mr-2 h-4 w-4" />
+                Truy vấn
+              </>
+            )}
           </Button>
         </div>
         
+        {isSearching && searchProgress > 0 && (
+          <div className="mt-2">
+            <Progress value={searchProgress} className="h-2" />
+            <p className="text-xs text-gray-500 mt-1">Đang tìm kiếm: {searchProgress}%</p>
+          </div>
+        )}
+        
         <div className="mt-4 text-sm text-gray-500">
-          <p>
-            {getSelectedFolderIds().length > 0 ? 
-              `Tìm kiếm trong ${getSelectedFolderIds().length} thư mục đã chọn` : 
-              "Tìm kiếm trong tất cả tài liệu"}
-          </p>
+          <div className="flex justify-between items-center">
+            <p>
+              {getSelectedFolderIds().length > 0 ? 
+                `Tìm kiếm trong ${getSelectedFolderIds().length} thư mục đã chọn` : 
+                "Tìm kiếm trong tất cả tài liệu"}
+            </p>
+            
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleLoadModel}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  Đang tải...
+                </>
+              ) : (
+                'Tải model về máy'
+              )}
+            </Button>
+          </div>
+          
           <p className="mt-1">
             Model: {selectedModel} | Platform: {selectedPlatform} | Embedding: {selectedEmbeddingModel.split('/').pop()}
           </p>

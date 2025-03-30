@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/components/ui/button';
 import { Info, Download, Loader2, Server, FileText, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { backendPlatforms, checkSystemRAM } from '@/utils/vectorUtils';
+import { checkSystemRAM } from '@/utils/vectorUtils';
 import { useToast } from '@/hooks/use-toast';
 
 interface ModelSelectorProps {
@@ -33,7 +33,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     setSelectedPlatform, 
     getAvailablePlatforms,
     getModelsByPlatform,
-    lastError
+    lastError,
+    isLargeModel,
+    checkRamForModel
   } = useAiModel();
   const { toast } = useToast();
   const [isInfoOpen, setIsInfoOpen] = React.useState(false);
@@ -66,15 +68,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     }
   };
 
-  const isLargeModel = (modelId: AiModelType): boolean => {
-    const model = models.find(m => m.id === modelId);
-    if (!model) return false;
-    
-    return model.parameters.includes('70B') || 
-           model.parameters.includes('405B') || 
-           parseInt(model.parameters) > 7;
-  };
-
   useEffect(() => {
     const checkRam = () => {
       const ramInfo = checkSystemRAM();
@@ -89,37 +82,23 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     setShowLoadError(!!lastError);
   }, [lastError]);
 
+  useEffect(() => {
+    setSelectedModelInfo(getModelInfo(value));
+  }, [value]);
+
   const handleLoadModel = async () => {
     if (!value) return;
     
-    const ramInfo = checkSystemRAM();
-    setRamCheckResult(ramInfo);
-    
-    if (ramInfo.warning && isLargeModel(value)) {
-      setShowRamWarning(true);
-      toast({
-        title: "Cảnh báo RAM",
-        description: `Máy tính của bạn chỉ có ${ramInfo.totalRAM}GB RAM. Model ${value} cần nhiều RAM để chạy hiệu quả.`,
-        variant: "destructive",
-      });
-    }
+    // Check RAM and show warning if needed
+    checkRamForModel(value);
     
     try {
       await loadModel(value);
       
-      const modelInfo = getModelInfo(value);
-      if (!modelInfo) return;
-      
-      const platform = backendPlatforms[modelInfo.platform as keyof typeof backendPlatforms];
-      if (platform) {
-        const response = await platform.callModel("Test connection", value);
-        console.log("Backend response:", response);
-        
-        toast({
-          title: "Đã kết nối backend",
-          description: `Đã thiết lập kết nối với platform ${modelInfo.platform} thành công`,
-        });
-      }
+      toast({
+        title: "Đã tải model thành công",
+        description: `Model ${value} đã sẵn sàng sử dụng`,
+      });
     } catch (error) {
       console.error("Error loading model:", error);
       toast({
@@ -254,7 +233,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       )}
 
       {showRamWarning && (
-        <Alert variant="warning" className="bg-amber-50 border-amber-200">
+        <Alert variant="default" className="bg-amber-50 border-amber-200">
           <AlertCircle className="h-4 w-4 text-amber-600" />
           <AlertTitle className="text-amber-800">Cảnh báo RAM</AlertTitle>
           <AlertDescription className="text-amber-700">

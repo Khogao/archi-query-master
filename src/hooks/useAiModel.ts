@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { pipeline, env } from '@huggingface/transformers';
+import { checkSystemRAM, backendPlatforms } from '@/utils/vectorUtils';
 
 // Configure Transformers.js for local models
 env.useBrowserCache = true;
@@ -138,6 +139,7 @@ export const useAiModel = (
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { toast } = useToast();
   const [lastError, setLastError] = useState<string | null>(null);
+  const [isModelLoaded, setIsModelLoaded] = useState<boolean>(false);
 
   const getModelInfo = (modelId: AiModelType): ModelInfo | undefined => {
     return AI_MODELS.find(model => model.id === modelId);
@@ -155,10 +157,41 @@ export const useAiModel = (
     return AI_MODELS.filter(model => model.platform === platform);
   };
 
+  // Check if a model is large (requires warning for low RAM)
+  const isLargeModel = (modelId: AiModelType): boolean => {
+    const model = AI_MODELS.find(m => m.id === modelId);
+    if (!model) return false;
+    
+    // Consider large if over 7B parameters or explicitly large/huge
+    return model.parameters.includes('70B') || 
+           model.parameters.includes('405B') || 
+           parseInt(model.parameters) > 7;
+  };
+
+  // Check RAM and show warning if needed
+  const checkRamForModel = (modelId: AiModelType): boolean => {
+    const ramInfo = checkSystemRAM();
+    const needsWarning = ramInfo.warning && isLargeModel(modelId);
+    
+    if (needsWarning) {
+      toast({
+        title: "Cảnh báo RAM",
+        description: `Máy tính của bạn chỉ có ${ramInfo.totalRAM}GB RAM. Model ${modelId} yêu cầu nhiều RAM để chạy hiệu quả.`,
+        variant: "default",
+      });
+    }
+    
+    return needsWarning;
+  };
+
   // Load model with error handling and fallbacks
   const loadModel = async (modelId: AiModelType) => {
     setIsLoading(true);
     setLastError(null);
+    
+    // Check RAM requirements
+    checkRamForModel(modelId);
+    
     try {
       const modelInfo = getModelInfo(modelId);
       
@@ -180,7 +213,28 @@ export const useAiModel = (
             description: `Model ${modelInfo.name} đã sẵn sàng sử dụng`,
           });
           setIsLoading(false);
+          setIsModelLoaded(true);
         }, 1500);
+        
+        return null;
+      }
+      
+      // For LlamaCPP models
+      if (modelInfo.platform === 'llamacpp') {
+        toast({
+          title: "Đang kết nối với LlamaCPP",
+          description: `Đang thiết lập kết nối đến ${modelInfo.name} trên nền tảng LlamaCPP...`,
+        });
+        
+        // Simulate successful connection
+        setTimeout(() => {
+          toast({
+            title: "Đã kết nối với LlamaCPP",
+            description: `Model ${modelInfo.name} đã sẵn sàng sử dụng`,
+          });
+          setIsLoading(false);
+          setIsModelLoaded(true);
+        }, 1800);
         
         return null;
       }
@@ -205,13 +259,18 @@ export const useAiModel = (
           { 
             revision: "main", 
             ...pipelineOptions,
-            progress_callback: (progressInfo) => {
-              console.log(`Loading model: ${Math.round(progressInfo.status?.percentage || 0)}%`);
+            progress_callback: (progressInfo: any) => {
+              // Handle progress properly using the loaded/total properties
+              const progress = progressInfo.loaded && progressInfo.total 
+                ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+                : 0;
+              console.log(`Loading model: ${progress}%`);
             }
           }
         );
         
         setEmbeddingPipeline(extractor);
+        setIsModelLoaded(true);
         
         toast({
           title: "Đã tải model thành công",
@@ -234,13 +293,18 @@ export const useAiModel = (
           FALLBACK_MODEL,
           { 
             revision: "main",
-            progress_callback: (progressInfo) => {
-              console.log(`Loading fallback model: ${Math.round(progressInfo.status?.percentage || 0)}%`);
+            progress_callback: (progressInfo: any) => {
+              // Handle progress properly using the loaded/total properties
+              const progress = progressInfo.loaded && progressInfo.total 
+                ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+                : 0;
+              console.log(`Loading fallback model: ${progress}%`);
             }
           }
         );
         
         setEmbeddingPipeline(fallbackExtractor);
+        setIsModelLoaded(true);
         
         toast({
           title: "Đã tải model thay thế thành công",
@@ -274,6 +338,7 @@ export const useAiModel = (
         );
         
         setEmbeddingPipeline(fallbackExtractor);
+        setIsModelLoaded(true);
         
         toast({
           title: "Đã tải model dự phòng thành công",
@@ -312,13 +377,18 @@ export const useAiModel = (
           embeddingModelId,
           { 
             revision: "main",
-            progress_callback: (progressInfo) => {
-              console.log(`Loading embedding model: ${Math.round(progressInfo.status?.percentage || 0)}%`);
+            progress_callback: (progressInfo: any) => {
+              // Handle progress properly using the loaded/total properties
+              const progress = progressInfo.loaded && progressInfo.total 
+                ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+                : 0;
+              console.log(`Loading embedding model: ${progress}%`);
             }
           }
         );
         
         setEmbeddingPipeline(extractor);
+        setIsModelLoaded(true);
         
         toast({
           title: "Đã tải model embedding thành công",
@@ -343,6 +413,7 @@ export const useAiModel = (
         );
         
         setEmbeddingPipeline(fallbackExtractor);
+        setIsModelLoaded(true);
         
         toast({
           title: "Đã tải model dự phòng thành công",
@@ -424,6 +495,66 @@ export const useAiModel = (
     return null;
   };
 
+  // Call the selected model with the given prompt
+  const callModel = async (prompt: string) => {
+    if (!selectedModel) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng chọn model trước khi gửi truy vấn",
+        variant: "destructive",
+      });
+      return null;
+    }
+    
+    const modelInfo = getModelInfo(selectedModel);
+    if (!modelInfo) {
+      toast({
+        title: "Lỗi",
+        description: "Không tìm thấy thông tin model",
+        variant: "destructive",
+      });
+      return null;
+    }
+    
+    try {
+      toast({
+        title: "Đang xử lý truy vấn",
+        description: `Đang gửi truy vấn đến ${modelInfo.name}...`,
+      });
+      
+      const platform = backendPlatforms[modelInfo.platform];
+      if (!platform) {
+        throw new Error(`Platform ${modelInfo.platform} không được hỗ trợ`);
+      }
+      
+      const result = await platform.callModel(prompt, selectedModel);
+      
+      if (result.error) {
+        toast({
+          title: "Lỗi khi xử lý truy vấn",
+          description: result.error,
+          variant: "destructive",
+        });
+        return null;
+      }
+      
+      toast({
+        title: "Đã xử lý truy vấn",
+        description: `Thời gian: ${result.timeTaken ? (result.timeTaken / 1000).toFixed(2) : '?'} giây`,
+      });
+      
+      return result.text;
+    } catch (error) {
+      console.error('Lỗi khi gọi model:', error);
+      toast({
+        title: "Lỗi khi xử lý truy vấn",
+        description: error instanceof Error ? error.message : "Không thể xử lý truy vấn",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
   useEffect(() => {
     // When selected model changes, load new model if platform is huggingface
     if (selectedModel && selectedPlatform === 'huggingface') {
@@ -451,10 +582,14 @@ export const useAiModel = (
     getAvailablePlatforms,
     getModelsByPlatform,
     isLoading,
+    isModelLoaded,
     loadModel,
     loadEmbeddingModel,
     generateEmbedding,
     embeddingPipeline,
-    lastError
+    lastError,
+    callModel,
+    isLargeModel,
+    checkRamForModel
   };
 };

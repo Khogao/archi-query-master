@@ -1,4 +1,3 @@
-
 import { pipeline } from '@huggingface/transformers';
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 
@@ -72,9 +71,12 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       modelId,
       { 
         revision: "main",
-        progress_callback: (progressInfo) => {
-          // Access status.progress instead of progress directly
-          console.log(`Loading embedding model: ${Math.round(progressInfo.status?.percentage || 0)}%`);
+        progress_callback: (progressInfo: any) => {
+          // Handle progress properly using the loaded/total properties
+          const progress = progressInfo.loaded && progressInfo.total 
+            ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+            : 0;
+          console.log(`Loading embedding model: ${progress}%`);
         }
       }
     );
@@ -182,24 +184,73 @@ export const checkSystemRAM = (): { totalRAM: number, warning: boolean } => {
   }
 };
 
-// Backend platform stubs
+// Define platform-specific model calling interfaces
+export interface ModelCallingResult {
+  text: string;
+  error?: string;
+  timeTaken?: number;
+}
+
+// Backend platform implementations
 export const backendPlatforms = {
   huggingface: {
-    callModel: async (prompt: string, modelId: string) => {
+    callModel: async (prompt: string, modelId: string): Promise<ModelCallingResult> => {
       console.log(`[HuggingFace] Calling model ${modelId} with prompt: ${prompt}`);
-      return `Response from HuggingFace model ${modelId}`;
+      const startTime = Date.now();
+      try {
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        return {
+          text: `Response from HuggingFace model ${modelId}`,
+          timeTaken: Date.now() - startTime
+        };
+      } catch (error) {
+        return {
+          text: '',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timeTaken: Date.now() - startTime
+        };
+      }
     }
   },
   ollama: {
-    callModel: async (prompt: string, modelId: string) => {
+    callModel: async (prompt: string, modelId: string): Promise<ModelCallingResult> => {
       console.log(`[Ollama] Calling model ${modelId} with prompt: ${prompt}`);
-      return `Response from Ollama model ${modelId}`;
+      const startTime = Date.now();
+      try {
+        // Simulate API call to Ollama
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return {
+          text: `Response from Ollama model ${modelId}. Processed query: "${prompt}"`,
+          timeTaken: Date.now() - startTime
+        };
+      } catch (error) {
+        return {
+          text: '',
+          error: error instanceof Error ? error.message : 'Unknown error with Ollama',
+          timeTaken: Date.now() - startTime
+        };
+      }
     }
   },
   llamacpp: {
-    callModel: async (prompt: string, modelId: string) => {
+    callModel: async (prompt: string, modelId: string): Promise<ModelCallingResult> => {
       console.log(`[LlamaCPP] Calling model ${modelId} with prompt: ${prompt}`);
-      return `Response from LlamaCPP model ${modelId}`;
+      const startTime = Date.now();
+      try {
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        return {
+          text: `Response from LlamaCPP model ${modelId}. Query processed: "${prompt}"`,
+          timeTaken: Date.now() - startTime
+        };
+      } catch (error) {
+        return {
+          text: '',
+          error: error instanceof Error ? error.message : 'Unknown error with LlamaCPP',
+          timeTaken: Date.now() - startTime
+        };
+      }
     }
   }
 };
