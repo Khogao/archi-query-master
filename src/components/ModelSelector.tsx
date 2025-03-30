@@ -32,13 +32,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     selectedPlatform, 
     setSelectedPlatform, 
     getAvailablePlatforms,
-    getModelsByPlatform
+    getModelsByPlatform,
+    lastError
   } = useAiModel();
   const { toast } = useToast();
   const [isInfoOpen, setIsInfoOpen] = React.useState(false);
   const [selectedModelInfo, setSelectedModelInfo] = React.useState(getModelInfo(value));
   const [embeddingModelInfo, setEmbeddingModelInfo] = React.useState<any>(null);
   const [showRamWarning, setShowRamWarning] = React.useState(false);
+  const [showLoadError, setShowLoadError] = React.useState(false);
   const [ramCheckResult, setRamCheckResult] = React.useState<{totalRAM: number, warning: boolean}>({ totalRAM: 0, warning: false });
 
   const availablePlatforms = getAvailablePlatforms();
@@ -83,6 +85,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     checkRam();
   }, [value]);
 
+  useEffect(() => {
+    setShowLoadError(!!lastError);
+  }, [lastError]);
+
   const handleLoadModel = async () => {
     if (!value) return;
     
@@ -98,19 +104,28 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       });
     }
     
-    await loadModel(value);
-    
-    const modelInfo = getModelInfo(value);
-    if (!modelInfo) return;
-    
-    const platform = backendPlatforms[modelInfo.platform as keyof typeof backendPlatforms];
-    if (platform) {
-      const response = await platform.callModel("Test connection", value);
-      console.log("Backend response:", response);
+    try {
+      await loadModel(value);
       
+      const modelInfo = getModelInfo(value);
+      if (!modelInfo) return;
+      
+      const platform = backendPlatforms[modelInfo.platform as keyof typeof backendPlatforms];
+      if (platform) {
+        const response = await platform.callModel("Test connection", value);
+        console.log("Backend response:", response);
+        
+        toast({
+          title: "Đã kết nối backend",
+          description: `Đã thiết lập kết nối với platform ${modelInfo.platform} thành công`,
+        });
+      }
+    } catch (error) {
+      console.error("Error loading model:", error);
       toast({
-        title: "Đã kết nối backend",
-        description: `Đã thiết lập kết nối với platform ${modelInfo.platform} thành công`,
+        title: "Lỗi khi tải model",
+        description: error instanceof Error ? error.message : "Không thể tải model",
+        variant: "destructive",
       });
     }
   };
@@ -118,14 +133,21 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const handleLoadEmbeddingModel = async () => {
     if (!embeddingModel) return;
     
-    const ramInfo = checkSystemRAM();
-    
-    await loadEmbeddingModel(embeddingModel);
-    
-    toast({
-      title: "Đã tải model embedding",
-      description: `Model embedding ${embeddingModel.split('/').pop()} đã sẵn sàng sử dụng`,
-    });
+    try {
+      await loadEmbeddingModel(embeddingModel);
+      
+      toast({
+        title: "Đã tải model embedding",
+        description: `Model embedding ${embeddingModel.split('/').pop()} đã sẵn sàng sử dụng`,
+      });
+    } catch (error) {
+      console.error("Error loading embedding model:", error);
+      toast({
+        title: "Lỗi khi tải model embedding",
+        description: error instanceof Error ? error.message : "Không thể tải model embedding",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -237,6 +259,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           <AlertTitle className="text-amber-800">Cảnh báo RAM</AlertTitle>
           <AlertDescription className="text-amber-700">
             Máy tính của bạn chỉ có {ramCheckResult.totalRAM}GB RAM. Model này yêu cầu nhiều RAM hơn để chạy hiệu quả.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {showLoadError && (
+        <Alert variant="destructive" className="bg-red-50 border-red-200">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-800">Lỗi khi tải model</AlertTitle>
+          <AlertDescription className="text-red-700">
+            {lastError || "Không thể tải model. Model dự phòng sẽ được sử dụng."}
           </AlertDescription>
         </Alert>
       )}

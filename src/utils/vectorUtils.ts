@@ -1,6 +1,8 @@
-
 import { pipeline } from '@huggingface/transformers';
 import { EmbeddingModelType } from '@/hooks/useAiModel';
+
+// Fallback model that's known to work reliably
+const FALLBACK_MODEL = 'Xenova/all-MiniLM-L6-v2';
 
 // Interface for vector store chunks
 export interface VectorChunk {
@@ -58,25 +60,54 @@ let inMemoryVectorStore: VectorChunk[] = [
   }
 ];
 
-// Generate embedding for a text query
+// Generate embedding for a text query with proper error handling
 export const generateEmbedding = async (text: string, modelId: EmbeddingModelType): Promise<number[]> => {
   try {
+    console.log(`Attempting to generate embedding with model: ${modelId}`);
+    
     // Create a pipeline for feature extraction
     const extractor = await pipeline(
       "feature-extraction",
       modelId,
-      { revision: "main" }
+      { 
+        revision: "main",
+        progress_callback: (progress) => {
+          console.log(`Loading embedding model: ${Math.round(progress.progress * 100)}%`);
+        }
+      }
     );
+    
+    console.log("Embedding pipeline created successfully");
     
     // Generate embedding
     const result = await extractor(text, { pooling: "mean", normalize: true });
+    console.log("Embedding generated successfully");
     
     // Convert to array of numbers
     return Array.from(result.data);
   } catch (error) {
-    console.error('Error generating embedding:', error);
-    // Return a mock embedding in case of error (for demo purposes)
-    return Array(384).fill(0).map(() => Math.random() - 0.5);
+    console.error('Error generating embedding with primary model:', error);
+    
+    try {
+      console.log(`Attempting with fallback model: ${FALLBACK_MODEL}`);
+      
+      // Try with fallback model
+      const fallbackExtractor = await pipeline(
+        "feature-extraction",
+        FALLBACK_MODEL,
+        { revision: "main" }
+      );
+      
+      // Generate embedding with fallback
+      const fallbackResult = await fallbackExtractor(text, { pooling: "mean", normalize: true });
+      console.log("Embedding generated successfully with fallback model");
+      
+      return Array.from(fallbackResult.data);
+    } catch (fallbackError) {
+      console.error('Error generating embedding with fallback model:', fallbackError);
+      // Return a mock embedding in case of all errors (for demo purposes)
+      return Array(384).fill(0).map(() => Math.random() - 0.5);
+    }
   }
 };
 
@@ -95,7 +126,7 @@ export const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
-// Search for similar chunks in the vector store
+// Search for similar chunks in the vector store with improved error handling
 export const searchSimilarChunks = async (
   query: string, 
   modelId: EmbeddingModelType,
@@ -103,6 +134,9 @@ export const searchSimilarChunks = async (
   limit: number = 5
 ): Promise<VectorChunk[]> => {
   try {
+    console.log(`Searching for similar chunks with model: ${modelId}`);
+    console.log(`Folders to search: ${folderIds.length > 0 ? folderIds.join(', ') : 'All folders'}`);
+    
     // Generate embedding for the query
     const queryEmbedding = await generateEmbedding(query, modelId);
     
@@ -110,6 +144,7 @@ export const searchSimilarChunks = async (
     let filteredChunks = inMemoryVectorStore;
     if (folderIds.length > 0) {
       filteredChunks = inMemoryVectorStore.filter(chunk => folderIds.includes(chunk.folderId));
+      console.log(`Filtered to ${filteredChunks.length} chunks from selected folders`);
     }
     
     // Calculate similarity scores
@@ -119,7 +154,9 @@ export const searchSimilarChunks = async (
     }));
     
     // Sort by similarity score (descending)
-    scoredChunks.sort((a, b) => b.score - a.score);
+    scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
+    
+    console.log(`Found ${scoredChunks.length} chunks, returning top ${limit}`);
     
     // Return top N results
     return scoredChunks.slice(0, limit);

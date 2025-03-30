@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useAiModel, AiModelType, EmbeddingModelType, PlatformType } from '@/hooks/useAiModel';
@@ -14,7 +15,7 @@ const Index = () => {
   const [selectedModel, setSelectedModel] = useState<AiModelType>('llama3:8b');
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformType>('ollama');
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<EmbeddingModelType>(
-    'bkai-foundation-models/vietnamese-bi-encoder'
+    'Xenova/all-MiniLM-L6-v2' // Changed to reliable fallback model
   );
   
   // OCR configuration
