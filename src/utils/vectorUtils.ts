@@ -1,3 +1,4 @@
+
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 import { pipeline, env } from '@huggingface/transformers';
 
@@ -74,20 +75,22 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       throw new Error('Text input cannot be empty');
     }
     
-    // Create a pipeline for feature extraction
+    // Create a pipeline for feature extraction with proper options
+    const pipelineOptions = {
+      revision: "main",
+      progress_callback: (progressInfo: any) => {
+        // Handle progress properly using the loaded/total properties
+        const progress = progressInfo.loaded && progressInfo.total 
+          ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+          : 0;
+        console.log(`Loading embedding model: ${progress}%`);
+      }
+    };
+    
     const extractor = await pipeline(
       "feature-extraction",
       modelId,
-      { 
-        revision: "main",
-        progress_callback: (progressInfo: any) => {
-          // Handle progress properly using the loaded/total properties
-          const progress = progressInfo.loaded && progressInfo.total 
-            ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
-            : 0;
-          console.log(`Loading embedding model: ${progress}%`);
-        }
-      }
+      pipelineOptions
     );
     
     console.log("Embedding pipeline created successfully");
@@ -109,18 +112,20 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       console.log(`Attempting with fallback model: ${FALLBACK_MODEL}`);
       
       // Try with fallback model
+      const fallbackPipelineOptions = {
+        revision: "main",
+        progress_callback: (progressInfo: any) => {
+          const progress = progressInfo.loaded && progressInfo.total 
+            ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+            : 0;
+          console.log(`Loading fallback model: ${progress}%`);
+        }
+      };
+      
       const fallbackExtractor = await pipeline(
         "feature-extraction",
         FALLBACK_MODEL,
-        { 
-          revision: "main",
-          progress_callback: (progressInfo: any) => {
-            const progress = progressInfo.loaded && progressInfo.total 
-              ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
-              : 0;
-            console.log(`Loading fallback model: ${progress}%`);
-          }
-        }
+        fallbackPipelineOptions
       );
       
       // Generate embedding with fallback
@@ -199,7 +204,36 @@ export async function searchSimilarChunks(
     return scoredChunks.slice(0, limit);
   } catch (error) {
     console.error('Error searching for similar chunks:', error);
-    throw new Error('Failed to search for similar chunks');
+    
+    // Fallback to basic text search
+    console.log('Falling back to basic text search');
+    
+    try {
+      // Simple text search fallback
+      const queryLower = query.toLowerCase();
+      
+      // Filter by folders if specified
+      let filteredChunks = inMemoryVectorStore;
+      if (folderIds.length > 0) {
+        filteredChunks = inMemoryVectorStore.filter(chunk => folderIds.includes(chunk.folderId));
+      }
+      
+      // Find chunks that contain the query text
+      const matchingChunks = filteredChunks
+        .filter(chunk => chunk.text.toLowerCase().includes(queryLower))
+        .map(chunk => ({
+          ...chunk,
+          score: 0.5 // Default score for text search
+        }));
+      
+      console.log(`Found ${matchingChunks.length} chunks with text search, returning top ${limit}`);
+      
+      // Return top N results (or all if fewer than N)
+      return matchingChunks.slice(0, limit);
+    } catch (fallbackError) {
+      console.error('Error in fallback text search:', fallbackError);
+      throw new Error('Failed to search for similar chunks');
+    }
   }
 };
 

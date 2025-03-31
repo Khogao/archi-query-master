@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { pipeline, env } from '@huggingface/transformers';
@@ -270,22 +271,21 @@ export const useAiModel = (
         await preWarmCache(modelInfo.huggingfaceId);
         
         // Try to load the specified embedding model
-        const pipelineOptions = {};
+        const pipelineOptions = {
+          revision: "main",
+          progress_callback: (progressInfo: any) => {
+            // Handle progress properly using the loaded/total properties
+            const progress = progressInfo.loaded && progressInfo.total 
+              ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+              : 0;
+            console.log(`Loading model: ${progress}%`);
+          }
+        };
         
         const extractor = await pipeline(
           "feature-extraction",
           modelInfo.huggingfaceId,
-          { 
-            revision: "main", 
-            ...pipelineOptions,
-            progress_callback: (progressInfo: any) => {
-              // Handle progress properly using the loaded/total properties
-              const progress = progressInfo.loaded && progressInfo.total 
-                ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
-                : 0;
-              console.log(`Loading model: ${progress}%`);
-            }
-          }
+          pipelineOptions
         );
         
         setEmbeddingPipeline(extractor);
@@ -309,19 +309,21 @@ export const useAiModel = (
         
         await preWarmCache(FALLBACK_MODEL);
         
+        const fallbackPipelineOptions = {
+          revision: "main",
+          progress_callback: (progressInfo: any) => {
+            // Handle progress properly using the loaded/total properties
+            const progress = progressInfo.loaded && progressInfo.total 
+              ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+              : 0;
+            console.log(`Loading fallback model: ${progress}%`);
+          }
+        };
+        
         const fallbackExtractor = await pipeline(
           "feature-extraction",
           FALLBACK_MODEL,
-          { 
-            revision: "main",
-            progress_callback: (progressInfo: any) => {
-              // Handle progress properly using the loaded/total properties
-              const progress = progressInfo.loaded && progressInfo.total 
-                ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
-                : 0;
-              console.log(`Loading fallback model: ${progress}%`);
-            }
-          }
+          fallbackPipelineOptions
         );
         
         setEmbeddingPipeline(fallbackExtractor);
@@ -354,12 +356,14 @@ export const useAiModel = (
         
         await preWarmCache(FALLBACK_MODEL);
         
+        const fallbackPipelineOptions = {
+          revision: "main"
+        };
+        
         const fallbackExtractor = await pipeline(
           "feature-extraction",
           FALLBACK_MODEL,
-          { 
-            revision: "main"
-          }
+          fallbackPipelineOptions
         );
         
         setEmbeddingPipeline(fallbackExtractor);
@@ -402,19 +406,21 @@ export const useAiModel = (
       
       try {
         // First try the requested model
+        const pipelineOptions = {
+          revision: "main",
+          progress_callback: (progressInfo: any) => {
+            // Handle progress properly using the loaded/total properties
+            const progress = progressInfo.loaded && progressInfo.total 
+              ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+              : 0;
+            console.log(`Loading embedding model: ${progress}%`);
+          }
+        };
+        
         const extractor = await pipeline(
           "feature-extraction",
           embeddingModelId,
-          { 
-            revision: "main",
-            progress_callback: (progressInfo: any) => {
-              // Handle progress properly using the loaded/total properties
-              const progress = progressInfo.loaded && progressInfo.total 
-                ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
-                : 0;
-              console.log(`Loading embedding model: ${progress}%`);
-            }
-          }
+          pipelineOptions
         );
         
         // Test the extractor to make sure it's working
@@ -446,12 +452,14 @@ export const useAiModel = (
         
         await preWarmCache(FALLBACK_MODEL);
         
+        const fallbackPipelineOptions = {
+          revision: "main"
+        };
+        
         const fallbackExtractor = await pipeline(
           "feature-extraction",
           FALLBACK_MODEL,
-          { 
-            revision: "main"
-          }
+          fallbackPipelineOptions
         );
         
         // Test the fallback extractor
@@ -542,12 +550,14 @@ export const useAiModel = (
         try {
           await preWarmCache(FALLBACK_MODEL);
           
+          const fallbackPipelineOptions = {
+            revision: "main"
+          };
+          
           const fallbackExtractor = await pipeline(
             "feature-extraction",
             FALLBACK_MODEL,
-            { 
-              revision: "main"
-            }
+            fallbackPipelineOptions
           );
           
           setEmbeddingPipeline(fallbackExtractor);
