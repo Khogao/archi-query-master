@@ -219,13 +219,39 @@ export const useAiModel = (
 
       // If Ollama model, handle differently
       if (modelInfo.platform === 'ollama') {
-        // ... keep existing code (Ollama connection simulation)
+        // Simulate connection to Ollama
+        toast({
+          title: "Kết nối tới Ollama",
+          description: `Đang kết nối tới Ollama để tải model ${modelId}...`,
+        });
+        
+        // Simulate loading time
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        toast({
+          title: "Đã kết nối tới Ollama",
+          description: `Đã kết nối tới Ollama thành công`,
+        });
+        
         return null;
       }
       
       // For LlamaCPP models
       if (modelInfo.platform === 'llamacpp') {
-        // ... keep existing code (LlamaCPP connection simulation)
+        // Simulate connection to LlamaCPP
+        toast({
+          title: "Kết nối tới LlamaCPP",
+          description: `Đang kết nối tới LlamaCPP để tải model ${modelId}...`,
+        });
+        
+        // Simulate loading time
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        
+        toast({
+          title: "Đã kết nối tới LlamaCPP",
+          description: `Đã kết nối tới LlamaCPP thành công`,
+        });
+        
         return null;
       }
 
@@ -244,7 +270,7 @@ export const useAiModel = (
         await preWarmCache(modelInfo.huggingfaceId);
         
         // Try to load the specified embedding model
-        const pipelineOptions = modelId === 'local-embedding-model' ? { quantized: true } : { quantized: false };
+        const pipelineOptions = {};
         
         const extractor = await pipeline(
           "feature-extraction",
@@ -288,7 +314,6 @@ export const useAiModel = (
           FALLBACK_MODEL,
           { 
             revision: "main",
-            quantized: false,
             progress_callback: (progressInfo: any) => {
               // Handle progress properly using the loaded/total properties
               const progress = progressInfo.loaded && progressInfo.total 
@@ -333,8 +358,7 @@ export const useAiModel = (
           "feature-extraction",
           FALLBACK_MODEL,
           { 
-            revision: "main", 
-            quantized: false 
+            revision: "main"
           }
         );
         
@@ -383,7 +407,6 @@ export const useAiModel = (
           embeddingModelId,
           { 
             revision: "main",
-            quantized: false,
             progress_callback: (progressInfo: any) => {
               // Handle progress properly using the loaded/total properties
               const progress = progressInfo.loaded && progressInfo.total 
@@ -427,8 +450,7 @@ export const useAiModel = (
           "feature-extraction",
           FALLBACK_MODEL,
           { 
-            revision: "main",
-            quantized: false, 
+            revision: "main"
           }
         );
         
@@ -524,8 +546,7 @@ export const useAiModel = (
             "feature-extraction",
             FALLBACK_MODEL,
             { 
-              revision: "main",
-              quantized: false
+              revision: "main"
             }
           );
           

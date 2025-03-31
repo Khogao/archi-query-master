@@ -1,4 +1,3 @@
-
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 import { pipeline, env } from '@huggingface/transformers';
 
@@ -81,7 +80,6 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       modelId,
       { 
         revision: "main",
-        quantized: false, // Set to true only for local models that need quantization
         progress_callback: (progressInfo: any) => {
           // Handle progress properly using the loaded/total properties
           const progress = progressInfo.loaded && progressInfo.total 
@@ -116,7 +114,6 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
         FALLBACK_MODEL,
         { 
           revision: "main",
-          quantized: false,
           progress_callback: (progressInfo: any) => {
             const progress = progressInfo.loaded && progressInfo.total 
               ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
