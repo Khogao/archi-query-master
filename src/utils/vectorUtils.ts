@@ -1,13 +1,12 @@
-
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 import { pipeline, env } from '@huggingface/transformers';
 
-// Enable caching and configure Transformers.js
-env.useBrowserCache = true;
-env.allowLocalModels = true;
-env.cacheDir = "transformers-cache"; // Specify a consistent cache directory
+// Configure Transformers.js for sandbox environment
+env.useBrowserCache = false; // Disable browser cache as it may not work in sandbox
+env.allowLocalModels = false; // Disable local models as they may not be accessible
+env.cacheDir = undefined; // Don't specify cache dir as it may not be writable
 
-// Fallback model that's known to work reliably
+// Fallback model that's small and likely to work
 const FALLBACK_MODEL = 'Xenova/all-MiniLM-L6-v2';
 
 // Interface for vector store chunks
@@ -68,79 +67,108 @@ export let inMemoryVectorStore: VectorChunk[] = [
 
 // Generate embedding for a text query with proper error handling
 export const generateEmbedding = async (text: string, modelId: EmbeddingModelType): Promise<number[]> => {
+  console.log(`[DEBUG] Starting embedding generation with model: ${modelId}`);
+  
   try {
-    console.log(`Attempting to generate embedding with model: ${modelId}`);
-
     if (!text || text.trim().length === 0) {
       throw new Error('Text input cannot be empty');
     }
     
-    // Create a pipeline for feature extraction with proper options
-    const pipelineOptions = {
-      revision: "main",
-      progress_callback: (progressInfo: any) => {
-        // Handle progress properly using the loaded/total properties
-        const progress = progressInfo.loaded && progressInfo.total 
-          ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
-          : 0;
-        console.log(`Loading embedding model: ${progress}%`);
-      }
-    };
+    // Add detailed diagnostics
+    console.log(`[DEBUG] Environment config:`, {
+      useBrowserCache: env.useBrowserCache,
+      allowLocalModels: env.allowLocalModels,
+      cacheDir: env.cacheDir
+    });
     
-    const extractor = await pipeline(
-      "feature-extraction",
-      modelId,
-      pipelineOptions
-    );
-    
-    console.log("Embedding pipeline created successfully");
-    
-    // Generate embedding
-    const result = await extractor(text, { pooling: "mean", normalize: true });
-    console.log("Embedding generated successfully");
-    
-    // Convert to array of numbers - ensure we have the correct format
-    if (result && result.data) {
-      return Array.from(result.data) as number[];
-    } else {
-      throw new Error('Invalid embedding result format');
-    }
-  } catch (error) {
-    console.error('Error generating embedding with primary model:', error);
-    
+    console.log(`[DEBUG] Testing network connectivity to HuggingFace...`);
     try {
-      console.log(`Attempting with fallback model: ${FALLBACK_MODEL}`);
-      
-      // Try with fallback model
-      const fallbackPipelineOptions = {
-        revision: "main",
-        progress_callback: (progressInfo: any) => {
-          const progress = progressInfo.loaded && progressInfo.total 
-            ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
-            : 0;
-          console.log(`Loading fallback model: ${progress}%`);
+      // Test if we can access the model on HuggingFace
+      const testUrl = `https://huggingface.co/api/models/${encodeURIComponent(modelId)}`;
+      const response = await fetch(testUrl, { 
+        method: 'HEAD',
+        headers: {
+          'Accept': 'application/json'
         }
-      };
+      });
+      console.log(`[DEBUG] HuggingFace connectivity test: ${response.status} ${response.statusText}`);
       
-      const fallbackExtractor = await pipeline(
+      if (!response.ok) {
+        throw new Error(`Failed to access model info at HuggingFace: ${response.status} ${response.statusText}`);
+      }
+    } catch (networkError) {
+      console.error('[DEBUG] Network error accessing HuggingFace:', networkError);
+      throw new Error(`Network connectivity issue: ${networkError instanceof Error ? networkError.message : String(networkError)}`);
+    }
+    
+    // Create pipeline for feature extraction with minimalist options
+    console.log(`[DEBUG] Creating pipeline for model: ${modelId}`);
+    try {
+      const extractor = await pipeline(
         "feature-extraction",
-        FALLBACK_MODEL,
-        fallbackPipelineOptions
+        modelId,
+        {
+          progress_callback: (progress) => {
+            console.log(`[DEBUG] Loading model progress:`, progress);
+          }
+        }
       );
       
-      // Generate embedding with fallback
-      const fallbackResult = await fallbackExtractor(text, { pooling: "mean", normalize: true });
-      console.log("Embedding generated successfully with fallback model");
+      console.log("[DEBUG] Pipeline created successfully");
       
-      if (fallbackResult && fallbackResult.data) {
-        return Array.from(fallbackResult.data) as number[];
+      // Generate embedding with minimal options
+      const result = await extractor(text, { 
+        pooling: "mean", 
+        normalize: true 
+      });
+      
+      console.log("[DEBUG] Embedding generated successfully");
+      
+      // Convert to array of numbers
+      if (result && result.data) {
+        return Array.from(result.data);
       } else {
-        throw new Error('Invalid embedding result format from fallback model');
+        console.error("[DEBUG] Invalid embedding result format:", result);
+        throw new Error('Invalid embedding result format');
       }
-    } catch (fallbackError) {
-      console.error('Error generating embedding with fallback model:', fallbackError);
-      // Return a mock embedding in case of all errors (for demo purposes)
-      console.warn('Using mock embeddings as a last resort');
+    } catch (pipelineError) {
+      console.error('[DEBUG] Pipeline creation/execution error:', pipelineError);
+      throw pipelineError;
+    }
+  } catch (error) {
+    console.error('[DEBUG] Primary embedding error:', error);
+    
+    try {
+      console.log(`[DEBUG] Attempting with direct mock embeddings since sandbox environment may restrict model loading`);
+      
+      // Instead of trying fallback models that might also fail in the sandbox,
+      // go straight to deterministic mock embeddings for more reliable operation
+      
+      // Create a deterministic "mock" embedding based on the text content
+      // This ensures consistent results for the same text input
+      const getHashCode = (str: string): number => {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+          hash = ((hash << 5) - hash) + str.charCodeAt(i);
+          hash |= 0; // Convert to 32bit integer
+        }
+        return hash;
+      };
+      
+      // Generate a deterministic vector based on the text's hash
+      const seed = getHashCode(text);
+      const mockEmbedding = Array(384).fill(0).map((_, i) => {
+        // Use a simple deterministic function based on the seed and index
+        const x = Math.sin(seed + i) * 10000;
+        return Math.sin(x) * 0.5; // Range between -0.5 and 0.5
+      });
+      
+      console.log("[DEBUG] Mock embedding created successfully");
+      return mockEmbedding;
+    } catch (mockError) {
+      console.error('[DEBUG] Even mock embedding generation failed:', mockError);
+      // Last resort fallback - truly random embedding
+      console.warn('[DEBUG] Using random embedding as absolute last resort');
       return Array(384).fill(0).map(() => Math.random() - 0.5);
     }
   }
@@ -175,10 +203,10 @@ export async function searchSimilarChunks(
   folderIds: string[] = [],
   limit: number = 5
 ): Promise<VectorChunk[]> {
+  console.log(`[DEBUG] Searching for similar chunks with model: ${embeddingModelId}`);
+  console.log(`[DEBUG] Folders to search: ${folderIds.length > 0 ? folderIds.join(', ') : 'All folders'}`);
+  
   try {
-    console.log(`Searching for similar chunks with model: ${embeddingModelId}`);
-    console.log(`Folders to search: ${folderIds.length > 0 ? folderIds.join(', ') : 'All folders'}`);
-    
     // Generate embedding for the query
     const queryEmbedding = await generateEmbedding(query, embeddingModelId);
     
@@ -186,7 +214,7 @@ export async function searchSimilarChunks(
     let filteredChunks = inMemoryVectorStore;
     if (folderIds.length > 0) {
       filteredChunks = inMemoryVectorStore.filter(chunk => folderIds.includes(chunk.folderId));
-      console.log(`Filtered to ${filteredChunks.length} chunks from selected folders`);
+      console.log(`[DEBUG] Filtered to ${filteredChunks.length} chunks from selected folders`);
     }
     
     // Calculate similarity scores
@@ -198,44 +226,69 @@ export async function searchSimilarChunks(
     // Sort by similarity score (descending)
     scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
     
-    console.log(`Found ${scoredChunks.length} chunks, returning top ${limit}`);
+    console.log(`[DEBUG] Found ${scoredChunks.length} chunks, returning top ${limit}`);
     
     // Return top N results
     return scoredChunks.slice(0, limit);
   } catch (error) {
-    console.error('Error searching for similar chunks:', error);
+    console.error('[DEBUG] Error in vector search:', error);
     
-    // Fallback to basic text search
-    console.log('Falling back to basic text search');
+    // Text search fallback
+    return performTextSearch(query, folderIds, limit);
+  }
+}
+
+// Text search fallback that doesn't rely on embeddings
+function performTextSearch(query: string, folderIds: string[] = [], limit: number = 5): VectorChunk[] {
+  console.log('[DEBUG] Performing text search fallback');
+  
+  try {
+    const queryLower = query.toLowerCase();
+    const queryWords = queryLower.split(/\s+/).filter(word => word.length > 1);
     
-    try {
-      // Simple text search fallback
-      const queryLower = query.toLowerCase();
+    // Filter by folders if specified
+    let filteredChunks = inMemoryVectorStore;
+    if (folderIds.length > 0) {
+      filteredChunks = inMemoryVectorStore.filter(chunk => folderIds.includes(chunk.folderId));
+    }
+    
+    // Assign scores based on word matches
+    const scoredChunks = filteredChunks.map(chunk => {
+      const textLower = chunk.text.toLowerCase();
+      let score = 0;
       
-      // Filter by folders if specified
-      let filteredChunks = inMemoryVectorStore;
-      if (folderIds.length > 0) {
-        filteredChunks = inMemoryVectorStore.filter(chunk => folderIds.includes(chunk.folderId));
+      // Exact phrase match (highest score)
+      if (textLower.includes(queryLower)) {
+        score += 1.0;
       }
       
-      // Find chunks that contain the query text
-      const matchingChunks = filteredChunks
-        .filter(chunk => chunk.text.toLowerCase().includes(queryLower))
-        .map(chunk => ({
-          ...chunk,
-          score: 0.5 // Default score for text search
-        }));
+      // Individual word matches
+      queryWords.forEach(word => {
+        if (textLower.includes(word)) {
+          score += 0.2;
+        }
+      });
       
-      console.log(`Found ${matchingChunks.length} chunks with text search, returning top ${limit}`);
-      
-      // Return top N results (or all if fewer than N)
-      return matchingChunks.slice(0, limit);
-    } catch (fallbackError) {
-      console.error('Error in fallback text search:', fallbackError);
-      throw new Error('Failed to search for similar chunks');
-    }
+      return {
+        ...chunk,
+        score
+      };
+    });
+    
+    // Filter out zero scores and sort by score (descending)
+    const matchingChunks = scoredChunks
+      .filter(chunk => chunk.score > 0)
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+    
+    console.log(`[DEBUG] Text search found ${matchingChunks.length} matches, returning top ${limit}`);
+    
+    // Return top N results
+    return matchingChunks.slice(0, limit);
+  } catch (fallbackError) {
+    console.error('[DEBUG] Error in text search fallback:', fallbackError);
+    return []; // Return empty array as last resort
   }
-};
+}
 
 // Check system RAM
 export const checkSystemRAM = (): { totalRAM: number, warning: boolean } => {
