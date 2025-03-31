@@ -1,10 +1,42 @@
+
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 import { pipeline, env } from '@huggingface/transformers';
 
-// Configure Transformers.js for sandbox environment
+// IMPORTANT: Create a polyfill for globalThisOrWindow to fix the reference error
+// This needs to be done before any other transformers.js code runs
+try {
+  // Check if window is defined (browser environment)
+  if (typeof window !== 'undefined') {
+    // @ts-ignore - Dynamically adding a property to the global Window interface
+    window.globalThisOrWindow = window;
+  } 
+  // Check if globalThis is defined (modern environments)
+  else if (typeof globalThis !== 'undefined') {
+    // @ts-ignore - Dynamically adding a property to the global object
+    globalThis.globalThisOrWindow = globalThis;
+  }
+  // If neither is available, create a minimal global object (unlikely but just in case)
+  else {
+    const global = Function('return this')();
+    // @ts-ignore - Dynamically adding a property to the global object
+    global.globalThisOrWindow = global;
+  }
+  console.log("[DEBUG] Successfully polyfilled globalThisOrWindow");
+} catch (error) {
+  console.error("[DEBUG] Error setting up globalThisOrWindow polyfill:", error);
+}
+
+// Configure Transformers.js for sandbox environment - using minimal settings
 env.useBrowserCache = false; // Disable browser cache as it may not work in sandbox
 env.allowLocalModels = false; // Disable local models as they may not be accessible
 env.cacheDir = undefined; // Don't specify cache dir as it may not be writable
+
+// Disable advanced features that might not work in restricted environments
+if (env.backends && env.backends.onnx) {
+  if (env.backends.onnx.wasm) {
+    env.backends.onnx.wasm.numThreads = 1; // Minimal threading
+  }
+}
 
 // Fallback model that's small and likely to work
 const FALLBACK_MODEL = 'Xenova/all-MiniLM-L6-v2';
@@ -81,9 +113,9 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       cacheDir: env.cacheDir
     });
     
-    console.log(`[DEBUG] Testing network connectivity to HuggingFace...`);
+    // Test network connectivity before attempting to load model
     try {
-      // Test if we can access the model on HuggingFace
+      console.log(`[DEBUG] Testing network connectivity to HuggingFace...`);
       const testUrl = `https://huggingface.co/api/models/${encodeURIComponent(modelId)}`;
       const response = await fetch(testUrl, { 
         method: 'HEAD',
@@ -101,15 +133,18 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       throw new Error(`Network connectivity issue: ${networkError instanceof Error ? networkError.message : String(networkError)}`);
     }
     
-    // Create pipeline for feature extraction with minimalist options
-    console.log(`[DEBUG] Creating pipeline for model: ${modelId}`);
     try {
+      // Create pipeline with minimal configuration to avoid compatibility issues
+      console.log(`[DEBUG] Creating pipeline for model: ${modelId} with minimal options`);
+      
+      // Use try-catch to handle potential globalThisOrWindow issues during pipeline creation
       const extractor = await pipeline(
         "feature-extraction",
         modelId,
         {
+          // Extremely minimal options to avoid compatibility issues
           progress_callback: (progress) => {
-            console.log(`[DEBUG] Loading model progress:`, progress);
+            console.log(`[DEBUG] Model loading progress:`, progress);
           }
         }
       );
@@ -139,10 +174,7 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
     console.error('[DEBUG] Primary embedding error:', error);
     
     try {
-      console.log(`[DEBUG] Attempting with direct mock embeddings since sandbox environment may restrict model loading`);
-      
-      // Instead of trying fallback models that might also fail in the sandbox,
-      // go straight to deterministic mock embeddings for more reliable operation
+      console.log(`[DEBUG] Using deterministic mock embeddings since sandbox environment has compatibility issues`);
       
       // Create a deterministic "mock" embedding based on the text content
       // This ensures consistent results for the same text input

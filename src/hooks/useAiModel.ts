@@ -1,9 +1,35 @@
+
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { pipeline, env } from '@huggingface/transformers';
 import { checkSystemRAM, backendPlatforms } from '@/utils/vectorUtils';
 
-// Configure Transformers.js for sandbox environment
+// Force polyfill for globalThisOrWindow if not already set
+try {
+  // Check if window is defined (browser environment)
+  if (typeof window !== 'undefined' && !window.globalThisOrWindow) {
+    // @ts-ignore - Dynamically adding a property to the global Window interface
+    window.globalThisOrWindow = window;
+  } 
+  // Check if globalThis is defined (modern environments)
+  else if (typeof globalThis !== 'undefined' && !globalThis.globalThisOrWindow) {
+    // @ts-ignore - Dynamically adding a property to the global object
+    globalThis.globalThisOrWindow = globalThis;
+  }
+  // If neither is available, create a minimal global object (unlikely but just in case)
+  else {
+    const global = Function('return this')();
+    // @ts-ignore - Dynamically adding a property to the global object
+    if (!global.globalThisOrWindow) {
+      global.globalThisOrWindow = global;
+    }
+  }
+  console.log("[DEBUG] Successfully ensured globalThisOrWindow is defined in useAiModel");
+} catch (error) {
+  console.error("[DEBUG] Error setting up globalThisOrWindow polyfill in useAiModel:", error);
+}
+
+// Configure Transformers.js for sandbox environment - using minimal settings
 env.useBrowserCache = false; // Disable browser cache as it may not work in sandbox
 env.allowLocalModels = false; // Disable local models as they may not be accessible
 env.cacheDir = undefined; // Don't specify cache dir as it may not be writable
@@ -149,6 +175,11 @@ export const useAiModel = (
   const [loadAttempts, setLoadAttempts] = useState<number>(0);
   const [diagnosticLogs, setDiagnosticLogs] = useState<string[]>([]);
 
+  // Helper function to get model info by ID
+  const getModelInfo = (modelId: AiModelType): ModelInfo | undefined => {
+    return AI_MODELS.find(model => model.id === modelId);
+  };
+
   // Add diagnostic logging
   const logDiagnostic = (message: string) => {
     console.log(`[DIAGNOSTIC] ${message}`);
@@ -169,7 +200,7 @@ export const useAiModel = (
 
   // Check if a model is large (requires warning for low RAM)
   const isLargeModel = (modelId: AiModelType): boolean => {
-    const model = AI_MODELS.find(m => m.id === modelId);
+    const model = getModelInfo(modelId);
     if (!model) return false;
     
     // Consider large if over 7B parameters or explicitly large/huge
@@ -802,3 +833,5 @@ export const useAiModel = (
     diagnosticLogs
   };
 };
+
+export default useAiModel;
