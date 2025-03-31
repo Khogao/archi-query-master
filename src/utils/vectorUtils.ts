@@ -1,5 +1,11 @@
+
 import { EmbeddingModelType } from '@/hooks/useAiModel';
-import { pipeline } from '@huggingface/transformers';
+import { pipeline, env } from '@huggingface/transformers';
+
+// Enable caching and configure Transformers.js
+env.useBrowserCache = true;
+env.allowLocalModels = true;
+env.cacheDir = "transformers-cache"; // Specify a consistent cache directory
 
 // Fallback model that's known to work reliably
 const FALLBACK_MODEL = 'Xenova/all-MiniLM-L6-v2';
@@ -64,6 +70,10 @@ export let inMemoryVectorStore: VectorChunk[] = [
 export const generateEmbedding = async (text: string, modelId: EmbeddingModelType): Promise<number[]> => {
   try {
     console.log(`Attempting to generate embedding with model: ${modelId}`);
+
+    if (!text || text.trim().length === 0) {
+      throw new Error('Text input cannot be empty');
+    }
     
     // Create a pipeline for feature extraction
     const extractor = await pipeline(
@@ -71,6 +81,7 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       modelId,
       { 
         revision: "main",
+        quantized: false, // Set to true only for local models that need quantization
         progress_callback: (progressInfo: any) => {
           // Handle progress properly using the loaded/total properties
           const progress = progressInfo.loaded && progressInfo.total 
@@ -87,8 +98,12 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
     const result = await extractor(text, { pooling: "mean", normalize: true });
     console.log("Embedding generated successfully");
     
-    // Convert to array of numbers
-    return Array.from(result.data);
+    // Convert to array of numbers - ensure we have the correct format
+    if (result && result.data) {
+      return Array.from(result.data) as number[];
+    } else {
+      throw new Error('Invalid embedding result format');
+    }
   } catch (error) {
     console.error('Error generating embedding with primary model:', error);
     
@@ -99,17 +114,31 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       const fallbackExtractor = await pipeline(
         "feature-extraction",
         FALLBACK_MODEL,
-        { revision: "main" }
+        { 
+          revision: "main",
+          quantized: false,
+          progress_callback: (progressInfo: any) => {
+            const progress = progressInfo.loaded && progressInfo.total 
+              ? Math.round((progressInfo.loaded / progressInfo.total) * 100)
+              : 0;
+            console.log(`Loading fallback model: ${progress}%`);
+          }
+        }
       );
       
       // Generate embedding with fallback
       const fallbackResult = await fallbackExtractor(text, { pooling: "mean", normalize: true });
       console.log("Embedding generated successfully with fallback model");
       
-      return Array.from(fallbackResult.data);
+      if (fallbackResult && fallbackResult.data) {
+        return Array.from(fallbackResult.data) as number[];
+      } else {
+        throw new Error('Invalid embedding result format from fallback model');
+      }
     } catch (fallbackError) {
       console.error('Error generating embedding with fallback model:', fallbackError);
       // Return a mock embedding in case of all errors (for demo purposes)
+      console.warn('Using mock embeddings as a last resort');
       return Array(384).fill(0).map(() => Math.random() - 0.5);
     }
   }

@@ -11,7 +11,7 @@ import { searchSimilarChunks } from '@/utils/vectorUtils';
 interface QueryPanelProps {
   getSelectedFolderIds: () => string[];
   selectedModel: string;
-  selectedEmbeddingModel: EmbeddingModelType; // Make sure this is the correct type
+  selectedEmbeddingModel: EmbeddingModelType;
   selectedPlatform: string;
 }
 
@@ -67,36 +67,91 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
         await loadEmbeddingModel(selectedEmbeddingModel);
       }
 
-      // Search for similar chunks
-      const searchResults = await searchSimilarChunks(
-        query,
-        selectedEmbeddingModel,
-        selectedFolderIds,
-        10 // Get top 10 results
-      );
+      try {
+        // Search for similar chunks
+        const searchResults = await searchSimilarChunks(
+          query,
+          selectedEmbeddingModel,
+          selectedFolderIds,
+          10 // Get top 10 results
+        );
 
-      // Convert to ResultChunk format
-      const formattedResults: ResultChunk[] = searchResults.map(chunk => ({
-        id: chunk.id,
-        text: chunk.text,
-        score: chunk.score || 0,
-        documentName: chunk.documentName,
-        folderId: chunk.folderId
-      }));
+        // Convert to ResultChunk format
+        const formattedResults: ResultChunk[] = searchResults.map(chunk => ({
+          id: chunk.id,
+          text: chunk.text,
+          score: chunk.score || 0,
+          documentName: chunk.documentName,
+          folderId: chunk.folderId
+        }));
 
-      setResults(formattedResults);
+        setResults(formattedResults);
 
-      if (formattedResults.length === 0) {
+        if (formattedResults.length === 0) {
+          toast({
+            title: "Không tìm thấy kết quả",
+            description: "Không tìm thấy kết quả phù hợp với truy vấn của bạn",
+            variant: "default",
+          });
+        } else {
+          toast({
+            title: "Tìm kiếm hoàn tất",
+            description: `Đã tìm thấy ${formattedResults.length} kết quả phù hợp`,
+          });
+        }
+      } catch (error) {
+        console.error('Error in vector search:', error);
+        
+        // Fall back to basic text search if embedding search fails
         toast({
-          title: "Không tìm thấy kết quả",
-          description: "Không tìm thấy kết quả phù hợp với truy vấn của bạn",
+          title: "Dùng tìm kiếm văn bản thay thế",
+          description: "Tìm kiếm vector gặp lỗi, đang sử dụng tìm kiếm văn bản cơ bản",
           variant: "default",
         });
-      } else {
-        toast({
-          title: "Tìm kiếm hoàn tất",
-          description: `Đã tìm thấy ${formattedResults.length} kết quả phù hợp`,
-        });
+        
+        // Simple text search fallback (for demo purposes)
+        const queryLower = query.toLowerCase();
+        
+        // Import inMemoryVectorStore directly
+        const { inMemoryVectorStore } = await import('@/utils/vectorUtils');
+        
+        // Filter chunks that contain the query text
+        const filteredChunks = inMemoryVectorStore
+          .filter(chunk => {
+            // Only include chunks from selected folders
+            if (!selectedFolderIds.includes(chunk.folderId)) return false;
+            
+            // Check if chunk contains query text
+            return chunk.text.toLowerCase().includes(queryLower);
+          })
+          .map(chunk => ({
+            ...chunk,
+            score: 0.5 // Default score for text search
+          }));
+        
+        // Convert to ResultChunk format
+        const formattedResults: ResultChunk[] = filteredChunks.map(chunk => ({
+          id: chunk.id,
+          text: chunk.text,
+          score: chunk.score || 0,
+          documentName: chunk.documentName,
+          folderId: chunk.folderId
+        }));
+        
+        setResults(formattedResults);
+        
+        if (formattedResults.length === 0) {
+          toast({
+            title: "Không tìm thấy kết quả",
+            description: "Không tìm thấy kết quả phù hợp với truy vấn của bạn",
+            variant: "default",
+          });
+        } else {
+          toast({
+            title: "Tìm kiếm hoàn tất (tìm kiếm cơ bản)",
+            description: `Đã tìm thấy ${formattedResults.length} kết quả phù hợp`,
+          });
+        }
       }
     } catch (error) {
       console.error('Error searching for documents:', error);
