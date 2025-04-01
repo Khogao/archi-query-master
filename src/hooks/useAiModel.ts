@@ -656,6 +656,17 @@ export const useAiModel = (
 
   // Generate embedding with improved error handling for sandbox environment
   const generateEmbedding = async (text: string) => {
+    // CRITICAL: Add explicit check for null or undefined text to prevent tokenizer errors
+    if (!text) {
+      logDiagnostic(`Input text is null or undefined - cannot generate embedding`, 'error');
+      throw new Error('Text input cannot be null or undefined');
+    }
+    
+    if (text.trim().length === 0) {
+      logDiagnostic(`Input text is empty after trimming - cannot generate embedding`, 'error');
+      throw new Error('Text input cannot be empty after trimming');
+    }
+    
     logDiagnostic(`Attempting to generate embedding for text: ${text.substring(0, 30)}...`);
     
     if (!embeddingPipeline) {

@@ -1,3 +1,4 @@
+
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 import { pipeline, env } from '@huggingface/transformers';
 
@@ -113,9 +114,19 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
   logDiagnostic(`Starting embedding generation with model: ${modelId}`);
   
   try {
-    if (!text || text.trim().length === 0) {
+    // CRITICAL: Add explicit check for null or undefined text
+    if (!text) {
+      logDiagnostic('Text input is null or undefined - THIS IS THE SOURCE OF THE ERROR', 'error');
+      throw new Error('Text input cannot be null or undefined');
+    }
+    
+    if (text.trim().length === 0) {
+      logDiagnostic('Text input is empty after trimming', 'error');
       throw new Error('Text input cannot be empty');
     }
+    
+    // Log the actual text content (first 50 chars) to help debug
+    logDiagnostic(`Processing text input: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`, 'info');
     
     // Add detailed diagnostics
     logDiagnostic(`Environment config:`, 'info');
@@ -191,6 +202,10 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       // This ensures consistent results for the same text input
       const getHashCode = (str: string): number => {
         let hash = 0;
+        if (!str) {
+          logDiagnostic('Warning: Creating hash for empty/null string', 'warning');
+          str = 'empty_string'; // Default value to prevent errors
+        }
         for (let i = 0; i < str.length; i++) {
           hash = ((hash << 5) - hash) + str.charCodeAt(i);
           hash |= 0; // Convert to 32bit integer
@@ -199,7 +214,7 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
       };
       
       // Generate a deterministic vector based on the text's hash
-      const seed = getHashCode(text);
+      const seed = getHashCode(text || 'empty_string');
       const mockEmbedding = Array(384).fill(0).map((_, i) => {
         // Use a simple deterministic function based on the seed and index
         const x = Math.sin(seed + i) * 10000;
@@ -241,7 +256,14 @@ export async function searchSimilarChunks(
   folderIds: string[] = [],
   limit: number = 5
 ): Promise<VectorChunk[]> {
+  // CRITICAL: Validate query input before processing
+  if (!query) {
+    logDiagnostic(`Invalid empty query provided to searchSimilarChunks`, 'error');
+    return performTextSearch('', folderIds, limit); // Fallback to empty search
+  }
+  
   logDiagnostic(`Searching for similar chunks with model: ${embeddingModelId}`);
+  logDiagnostic(`Query text: "${query.substring(0, 30)}${query.length > 30 ? '...' : ''}"`, 'info');
   logDiagnostic(`Folders to search: ${folderIds.length > 0 ? folderIds.join(', ') : 'All folders'}`);
   
   try {
@@ -284,6 +306,12 @@ function performTextSearch(query: string, folderIds: string[] = [], limit: numbe
   console.log('[DEBUG] Performing text search fallback');
   
   try {
+    // Handle empty query case
+    if (!query || query.trim() === '') {
+      logDiagnostic('Empty query provided to text search, returning empty results', 'warning');
+      return [];
+    }
+    
     const queryLower = query.toLowerCase();
     const queryWords = queryLower.split(/\s+/).filter(word => word.length > 1);
     
