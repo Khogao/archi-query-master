@@ -34,7 +34,8 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
   } = useAiModel();
 
   const handleSearch = async () => {
-    if (!query.trim()) {
+    // Check for empty query first to prevent unnecessary processing
+    if (!query?.trim()) {
       toast({
         title: "Vui lòng nhập truy vấn",
         description: "Hãy nhập nội dung truy vấn để tìm kiếm thông tin",
