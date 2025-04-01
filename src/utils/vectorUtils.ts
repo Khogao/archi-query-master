@@ -1,4 +1,3 @@
-
 import { EmbeddingModelType } from '@/hooks/useAiModel';
 import { pipeline, env } from '@huggingface/transformers';
 
@@ -97,9 +96,21 @@ export let inMemoryVectorStore: VectorChunk[] = [
   }
 ];
 
+// Enhanced diagnostic logging with clear status indicators
+const logDiagnostic = (message: string, status: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+  const prefix = {
+    'info': '[VECTORUTILS] 🔍',
+    'success': '[VECTORUTILS] ✅',
+    'warning': '[VECTORUTILS] ⚠️',
+    'error': '[VECTORUTILS] ❌'
+  };
+  
+  console.log(`${prefix[status]} ${message}`);
+};
+
 // Generate embedding for a text query with proper error handling
 export const generateEmbedding = async (text: string, modelId: EmbeddingModelType): Promise<number[]> => {
-  console.log(`[DEBUG] Starting embedding generation with model: ${modelId}`);
+  logDiagnostic(`Starting embedding generation with model: ${modelId}`);
   
   try {
     if (!text || text.trim().length === 0) {
@@ -107,15 +118,14 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
     }
     
     // Add detailed diagnostics
-    console.log(`[DEBUG] Environment config:`, {
-      useBrowserCache: env.useBrowserCache,
-      allowLocalModels: env.allowLocalModels,
-      cacheDir: env.cacheDir
-    });
+    logDiagnostic(`Environment config:`, 'info');
+    logDiagnostic(`useBrowserCache: ${env.useBrowserCache}`, 'info');
+    logDiagnostic(`allowLocalModels: ${env.allowLocalModels}`, 'info');
+    logDiagnostic(`cacheDir: ${env.cacheDir ? env.cacheDir : 'undefined'}`, 'info');
     
     // Test network connectivity before attempting to load model
     try {
-      console.log(`[DEBUG] Testing network connectivity to HuggingFace...`);
+      logDiagnostic(`Testing network connectivity to HuggingFace...`);
       const testUrl = `https://huggingface.co/api/models/${encodeURIComponent(modelId)}`;
       const response = await fetch(testUrl, { 
         method: 'HEAD',
@@ -123,19 +133,19 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
           'Accept': 'application/json'
         }
       });
-      console.log(`[DEBUG] HuggingFace connectivity test: ${response.status} ${response.statusText}`);
+      logDiagnostic(`HuggingFace connectivity test: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
       
       if (!response.ok) {
         throw new Error(`Failed to access model info at HuggingFace: ${response.status} ${response.statusText}`);
       }
     } catch (networkError) {
-      console.error('[DEBUG] Network error accessing HuggingFace:', networkError);
+      logDiagnostic(`Network error accessing HuggingFace: ${networkError instanceof Error ? networkError.message : String(networkError)}`, 'error');
       throw new Error(`Network connectivity issue: ${networkError instanceof Error ? networkError.message : String(networkError)}`);
     }
     
     try {
       // Create pipeline with minimal configuration to avoid compatibility issues
-      console.log(`[DEBUG] Creating pipeline for model: ${modelId} with minimal options`);
+      logDiagnostic(`Creating pipeline for model: ${modelId} with minimal options`);
       
       // Use try-catch to handle potential globalThisOrWindow issues during pipeline creation
       const extractor = await pipeline(
@@ -144,37 +154,38 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
         {
           // Extremely minimal options to avoid compatibility issues
           progress_callback: (progress) => {
-            console.log(`[DEBUG] Model loading progress:`, progress);
+            logDiagnostic(`Model loading progress: ${JSON.stringify(progress)}`);
           }
         }
       );
       
-      console.log("[DEBUG] Pipeline created successfully");
+      logDiagnostic("Pipeline created successfully", 'success');
       
       // Generate embedding with minimal options
+      logDiagnostic(`Generating embedding for text: "${text.substring(0, 20)}..."`, 'info');
       const result = await extractor(text, { 
         pooling: "mean", 
         normalize: true 
       });
       
-      console.log("[DEBUG] Embedding generated successfully");
+      logDiagnostic("Embedding generated successfully - REAL EMBEDDING", 'success');
       
       // Convert to array of numbers
       if (result && result.data) {
         return Array.from(result.data);
       } else {
-        console.error("[DEBUG] Invalid embedding result format:", result);
+        logDiagnostic("Invalid embedding result format", 'error');
         throw new Error('Invalid embedding result format');
       }
     } catch (pipelineError) {
-      console.error('[DEBUG] Pipeline creation/execution error:', pipelineError);
+      logDiagnostic(`Pipeline creation/execution error: ${pipelineError instanceof Error ? pipelineError.message : String(pipelineError)}`, 'error');
       throw pipelineError;
     }
   } catch (error) {
-    console.error('[DEBUG] Primary embedding error:', error);
+    logDiagnostic(`Primary embedding error: ${error instanceof Error ? error.message : String(error)}`, 'error');
     
     try {
-      console.log(`[DEBUG] Using deterministic mock embeddings since sandbox environment has compatibility issues`);
+      logDiagnostic(`Using deterministic mock embeddings since sandbox environment has compatibility issues`, 'warning');
       
       // Create a deterministic "mock" embedding based on the text content
       // This ensures consistent results for the same text input
@@ -195,12 +206,12 @@ export const generateEmbedding = async (text: string, modelId: EmbeddingModelTyp
         return Math.sin(x) * 0.5; // Range between -0.5 and 0.5
       });
       
-      console.log("[DEBUG] Mock embedding created successfully");
+      logDiagnostic("Mock embedding created successfully - USING MOCK EMBEDDING", 'warning');
       return mockEmbedding;
     } catch (mockError) {
-      console.error('[DEBUG] Even mock embedding generation failed:', mockError);
+      logDiagnostic(`Even mock embedding generation failed: ${mockError instanceof Error ? mockError.message : String(mockError)}`, 'error');
       // Last resort fallback - truly random embedding
-      console.warn('[DEBUG] Using random embedding as absolute last resort');
+      logDiagnostic(`Using random embedding as absolute last resort - RANDOM EMBEDDING`, 'error');
       return Array(384).fill(0).map(() => Math.random() - 0.5);
     }
   }
@@ -222,12 +233,7 @@ export const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
 };
 
 /**
- * Search for similar chunks
- * @param query The search query
- * @param embeddingModelId The embedding model to use
- * @param folderIds List of folder IDs to filter by (if empty, search all)
- * @param limit Maximum number of results to return
- * @returns Array of chunks sorted by similarity
+ * Search for similar chunks with enhanced diagnostic logging
  */
 export async function searchSimilarChunks(
   query: string,
@@ -235,21 +241,23 @@ export async function searchSimilarChunks(
   folderIds: string[] = [],
   limit: number = 5
 ): Promise<VectorChunk[]> {
-  console.log(`[DEBUG] Searching for similar chunks with model: ${embeddingModelId}`);
-  console.log(`[DEBUG] Folders to search: ${folderIds.length > 0 ? folderIds.join(', ') : 'All folders'}`);
+  logDiagnostic(`Searching for similar chunks with model: ${embeddingModelId}`);
+  logDiagnostic(`Folders to search: ${folderIds.length > 0 ? folderIds.join(', ') : 'All folders'}`);
   
   try {
     // Generate embedding for the query
+    logDiagnostic(`Generating embedding for query: "${query.substring(0, 30)}..."`);
     const queryEmbedding = await generateEmbedding(query, embeddingModelId);
     
     // Filter by folders if specified
     let filteredChunks = inMemoryVectorStore;
     if (folderIds.length > 0) {
       filteredChunks = inMemoryVectorStore.filter(chunk => folderIds.includes(chunk.folderId));
-      console.log(`[DEBUG] Filtered to ${filteredChunks.length} chunks from selected folders`);
+      logDiagnostic(`Filtered to ${filteredChunks.length} chunks from selected folders`, 'info');
     }
     
     // Calculate similarity scores
+    logDiagnostic(`Calculating similarity scores for ${filteredChunks.length} chunks`, 'info');
     const scoredChunks = filteredChunks.map(chunk => ({
       ...chunk,
       score: cosineSimilarity(queryEmbedding, chunk.embedding)
@@ -258,12 +266,13 @@ export async function searchSimilarChunks(
     // Sort by similarity score (descending)
     scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
     
-    console.log(`[DEBUG] Found ${scoredChunks.length} chunks, returning top ${limit}`);
+    logDiagnostic(`Vector search complete. Found ${scoredChunks.length} chunks, returning top ${limit}`, 'success');
     
     // Return top N results
     return scoredChunks.slice(0, limit);
   } catch (error) {
-    console.error('[DEBUG] Error in vector search:', error);
+    logDiagnostic(`Error in vector search: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    logDiagnostic('Falling back to text search', 'warning');
     
     // Text search fallback
     return performTextSearch(query, folderIds, limit);

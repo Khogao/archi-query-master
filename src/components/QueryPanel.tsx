@@ -4,7 +4,7 @@ import { useAiModel, EmbeddingModelType } from '@/hooks/useAiModel';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { SearchIcon, Loader2 } from 'lucide-react';
+import { SearchIcon, Loader2, BugIcon } from 'lucide-react';
 import { QueryResults, ResultChunk } from '@/components/QueryResults';
 import { searchSimilarChunks } from '@/utils/vectorUtils';
 
@@ -24,6 +24,7 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ResultChunk[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isTestingEmbedding, setIsTestingEmbedding] = useState(false);
   const { toast } = useToast();
   const { 
     embeddingPipeline, 
@@ -165,6 +166,62 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
     }
   };
 
+  // Handle the Test Embedding Query button click
+  const handleTestEmbedding = async () => {
+    setIsTestingEmbedding(true);
+    const testQuery = 'quy chuẩn xây dựng là gì?';
+    
+    try {
+      console.log('[TEST] --- Starting Test Embedding Query ---');
+      console.log(`[TEST] Query: "${testQuery}"`);
+      console.log(`[TEST] Embedding Model: ${selectedEmbeddingModel}`);
+      
+      // Get selected folders
+      const selectedFolderIds = getSelectedFolderIds();
+      console.log(`[TEST] Selected Folders: ${selectedFolderIds.length > 0 ? selectedFolderIds.join(', ') : 'None'}`);
+      
+      if (selectedFolderIds.length === 0) {
+        console.log('[TEST] No folders selected, using all folders for testing');
+      }
+      
+      // Ensure we have an embedding model loaded
+      if (!embeddingPipeline) {
+        console.log('[TEST] No embedding pipeline loaded, loading now...');
+        await loadEmbeddingModel(selectedEmbeddingModel);
+      } else {
+        console.log('[TEST] Using existing embedding pipeline');
+      }
+      
+      // Search for similar chunks
+      console.log('[TEST] Calling searchSimilarChunks function...');
+      const searchResults = await searchSimilarChunks(
+        testQuery,
+        selectedEmbeddingModel,
+        selectedFolderIds.length > 0 ? selectedFolderIds : [],
+        5 // Get top 5 results for test
+      );
+      
+      console.log('[TEST] Search results:', searchResults);
+      console.log('[TEST] --- Finished Test Embedding Query ---');
+      
+      toast({
+        title: "Test Embedding completed",
+        description: `Found ${searchResults.length} results. Check console for details.`,
+      });
+    } catch (error) {
+      console.error('[TEST] Error during test:', error);
+      console.log('[TEST] --- Test Failed ---');
+      
+      toast({
+        title: "Test Embedding failed",
+        description: error instanceof Error ? error.message : "Unknown error during test",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTestingEmbedding(false);
+    }
+  };
+
   return (
     <div className="mt-8">
       <h2 className="text-xl font-semibold mb-4">Truy vấn tài liệu</h2>
@@ -177,7 +234,28 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
           className="min-h-[100px]"
         />
         
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          {/* Test Embedding Query Button */}
+          <Button 
+            onClick={handleTestEmbedding}
+            disabled={isTestingEmbedding || isLoading}
+            variant="outline"
+            className="gap-2"
+          >
+            {isTestingEmbedding ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <BugIcon className="h-4 w-4" />
+                Test Embedding Query
+              </>
+            )}
+          </Button>
+          
+          {/* Regular Search Button */}
           <Button 
             onClick={handleSearch} 
             disabled={isSearching || isLoading}

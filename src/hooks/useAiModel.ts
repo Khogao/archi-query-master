@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { pipeline, env } from '@huggingface/transformers';
@@ -7,12 +6,12 @@ import { checkSystemRAM, backendPlatforms } from '@/utils/vectorUtils';
 // Force polyfill for globalThisOrWindow if not already set
 try {
   // Check if window is defined (browser environment)
-  if (typeof window !== 'undefined' && !window.globalThisOrWindow) {
+  if (typeof window !== 'undefined') {
     // @ts-ignore - Dynamically adding a property to the global Window interface
     window.globalThisOrWindow = window;
   } 
   // Check if globalThis is defined (modern environments)
-  else if (typeof globalThis !== 'undefined' && !globalThis.globalThisOrWindow) {
+  else if (typeof globalThis !== 'undefined') {
     // @ts-ignore - Dynamically adding a property to the global object
     globalThis.globalThisOrWindow = globalThis;
   }
@@ -180,10 +179,17 @@ export const useAiModel = (
     return AI_MODELS.find(model => model.id === modelId);
   };
 
-  // Add diagnostic logging
-  const logDiagnostic = (message: string) => {
-    console.log(`[DIAGNOSTIC] ${message}`);
-    setDiagnosticLogs(prev => [...prev, message]);
+  // Enhanced diagnostic logging with clear success/failure indicators
+  const logDiagnostic = (message: string, status: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    const prefix = {
+      'info': '[DIAGNOSTIC] 🔍',
+      'success': '[DIAGNOSTIC] ✅',
+      'warning': '[DIAGNOSTIC] ⚠️',
+      'error': '[DIAGNOSTIC] ❌'
+    };
+    
+    console.log(`${prefix[status]} ${message}`);
+    setDiagnosticLogs(prev => [...prev, `${status.toUpperCase()}: ${message}`]);
   };
 
   // Get list of available platforms
@@ -457,12 +463,16 @@ export const useAiModel = (
     }
   };
 
-  // Load embedding model with improved error handling and diagnostics
+  // Load embedding model with improved error handling and diagnostic clarity
   const loadEmbeddingModel = async (embeddingModelId: EmbeddingModelType) => {
     setIsLoading(true);
     setLastError(null);
     setLoadAttempts(prev => prev + 1);
     setDiagnosticLogs([]);
+    
+    let usedRealModel = false;
+    let usedFallbackModel = false;
+    let usedMockPipeline = false;
     
     try {
       toast({
@@ -475,7 +485,7 @@ export const useAiModel = (
       // Check connectivity first
       const isConnected = await testHuggingFaceConnection(embeddingModelId);
       if (!isConnected) {
-        logDiagnostic(`Cannot connect to HuggingFace for embedding model ${embeddingModelId}`);
+        logDiagnostic(`Cannot connect to HuggingFace for embedding model ${embeddingModelId}`, 'error');
         throw new Error(`Không thể kết nối tới HuggingFace cho model embedding ${embeddingModelId}`);
       }
       
@@ -496,7 +506,7 @@ export const useAiModel = (
           pipelineOptions
         );
         
-        logDiagnostic('Embedding pipeline created successfully');
+        logDiagnostic('Embedding pipeline created successfully', 'success');
         
         // Test the extractor with a simple text
         logDiagnostic('Testing embedding pipeline with sample text');
@@ -504,13 +514,14 @@ export const useAiModel = (
         const testResult = await extractor(testText, { pooling: "mean", normalize: true });
         
         if (!testResult || !testResult.data) {
-          logDiagnostic('Embedding test failed: invalid result format');
+          logDiagnostic('Embedding test failed: invalid result format', 'error');
           throw new Error('Model loaded but returned invalid results on test');
         }
         
-        logDiagnostic('Embedding test succeeded');
+        logDiagnostic('Embedding test succeeded - REAL MODEL OPERATIONAL', 'success');
         setEmbeddingPipeline(extractor);
         setIsModelLoaded(true);
+        usedRealModel = true;
         
         toast({
           title: "Đã tải model embedding thành công",
@@ -519,7 +530,7 @@ export const useAiModel = (
         
         return extractor;
       } catch (error) {
-        logDiagnostic(`Error loading embedding model ${embeddingModelId}: ${error instanceof Error ? error.message : String(error)}`);
+        logDiagnostic(`Error loading embedding model ${embeddingModelId}: ${error instanceof Error ? error.message : String(error)}`, 'error');
         
         // If requested model fails, try fallback with detailed logging
         toast({
@@ -533,7 +544,7 @@ export const useAiModel = (
         // Check connectivity to fallback
         const isFallbackConnected = await testHuggingFaceConnection(FALLBACK_MODEL);
         if (!isFallbackConnected) {
-          logDiagnostic(`Cannot connect to HuggingFace for fallback model ${FALLBACK_MODEL}`);
+          logDiagnostic(`Cannot connect to HuggingFace for fallback model ${FALLBACK_MODEL}`, 'error');
           throw new Error(`Không thể kết nối tới HuggingFace cho model dự phòng ${FALLBACK_MODEL}`);
         }
         
@@ -551,7 +562,7 @@ export const useAiModel = (
             fallbackPipelineOptions
           );
           
-          logDiagnostic('Fallback embedding pipeline created successfully');
+          logDiagnostic('Fallback embedding pipeline created successfully', 'success');
           
           // Test the fallback extractor
           logDiagnostic('Testing fallback embedding pipeline with sample text');
@@ -559,13 +570,14 @@ export const useAiModel = (
           const testResult = await fallbackExtractor(testText, { pooling: "mean", normalize: true });
           
           if (!testResult || !testResult.data) {
-            logDiagnostic('Fallback embedding test failed: invalid result format');
+            logDiagnostic('Fallback embedding test failed: invalid result format', 'error');
             throw new Error('Fallback model loaded but returned invalid results on test');
           }
           
-          logDiagnostic('Fallback embedding test succeeded');
+          logDiagnostic('Fallback embedding test succeeded - USING FALLBACK REAL MODEL', 'success');
           setEmbeddingPipeline(fallbackExtractor);
           setIsModelLoaded(true);
+          usedFallbackModel = true;
           
           toast({
             title: "Đã tải model dự phòng thành công",
@@ -574,12 +586,12 @@ export const useAiModel = (
           
           return fallbackExtractor;
         } catch (fallbackError) {
-          logDiagnostic(`Fallback embedding model error: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+          logDiagnostic(`Fallback embedding model error: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`, 'error');
           throw fallbackError; // Re-throw to be caught by outer catch
         }
       }
     } catch (error) {
-      logDiagnostic(`Critical embedding error: ${error instanceof Error ? error.message : String(error)}`);
+      logDiagnostic(`Critical embedding error: ${error instanceof Error ? error.message : String(error)}`, 'error');
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setLastError(errorMessage);
       
@@ -590,13 +602,13 @@ export const useAiModel = (
       });
       
       // Create a mock embedding pipeline as last resort for sandbox environment
-      logDiagnostic('Creating mock embedding pipeline as last resort');
+      logDiagnostic('Creating mock embedding pipeline as last resort - NO REAL MODEL AVAILABLE', 'warning');
       
       try {
         // Create a deterministic mock pipeline that gives consistent results for the same input
         const mockPipeline = {
           __call: async (text: string, options: any) => {
-            logDiagnostic('Using mock embedding pipeline for input: ' + (typeof text === 'string' ? text.substring(0, 20) + '...' : 'non-string'));
+            logDiagnostic('Using MOCK embedding pipeline for input: ' + (typeof text === 'string' ? text.substring(0, 20) + '...' : 'non-string'), 'warning');
             
             // Create deterministic "mock" embeddings based on text content
             const getHashCode = (str: string): number => {
@@ -616,13 +628,14 @@ export const useAiModel = (
               return Math.sin(x) * 0.5; // Range between -0.5 and 0.5
             });
             
-            logDiagnostic('Mock embedding created successfully');
+            logDiagnostic('Mock embedding created successfully', 'success');
             return { data: mockEmbedding };
           }
         };
         
         setEmbeddingPipeline(mockPipeline);
         setIsModelLoaded(true);
+        usedMockPipeline = true;
         
         toast({
           title: "Chuyển sang chế độ dự phòng",
@@ -632,10 +645,11 @@ export const useAiModel = (
         
         return mockPipeline;
       } catch (mockError) {
-        logDiagnostic(`Even mock embedding pipeline creation failed: ${mockError instanceof Error ? mockError.message : String(mockError)}`);
+        logDiagnostic(`Even mock embedding pipeline creation failed: ${mockError instanceof Error ? mockError.message : String(mockError)}`, 'error');
         return null;
       }
     } finally {
+      logDiagnostic(`Embedding model loading complete. Status: ${usedRealModel ? 'Using primary real model' : usedFallbackModel ? 'Using fallback real model' : usedMockPipeline ? 'Using mock pipeline' : 'Failed completely'}`, usedRealModel ? 'success' : usedFallbackModel ? 'success' : usedMockPipeline ? 'warning' : 'error');
       setIsLoading(false);
     }
   };
@@ -660,14 +674,14 @@ export const useAiModel = (
         // Try to use the pipeline to generate embeddings
         logDiagnostic('Using existing embedding pipeline');
         const result = await embeddingPipeline(text, { pooling: "mean", normalize: true });
-        logDiagnostic('Embedding generated successfully');
+        logDiagnostic('Embedding generated successfully', 'success');
         return result;
       } catch (error) {
-        logDiagnostic(`Error generating embedding: ${error instanceof Error ? error.message : String(error)}`);
+        logDiagnostic(`Error generating embedding: ${error instanceof Error ? error.message : String(error)}`, 'error');
         
         // If current pipeline fails, create a mock embedding pipeline immediately
         // since we've already tried fallbacks in loadEmbeddingModel
-        logDiagnostic('Creating on-the-fly mock embedding');
+        logDiagnostic('Creating on-the-fly MOCK embedding due to runtime error', 'warning');
         
         try {
           // Create deterministic "mock" embeddings based on text content
@@ -688,13 +702,13 @@ export const useAiModel = (
             return Math.sin(x) * 0.5; // Range between -0.5 and 0.5
           });
           
-          logDiagnostic('Mock embedding created successfully');
+          logDiagnostic('On-the-fly mock embedding created successfully', 'warning');
           return { data: mockEmbedding };
         } catch (mockError) {
-          logDiagnostic(`Error creating mock embedding: ${mockError instanceof Error ? mockError.message : String(mockError)}`);
+          logDiagnostic(`Error creating mock embedding: ${mockError instanceof Error ? mockError.message : String(mockError)}`, 'error');
           
           // Return random embeddings as absolute last resort
-          logDiagnostic('Using random embedding as absolute last resort');
+          logDiagnostic('Using random embedding as absolute last resort', 'warning');
           return { 
             data: Array(384).fill(0).map(() => Math.random() - 0.5) 
           };
@@ -703,7 +717,7 @@ export const useAiModel = (
     }
     
     // If no pipeline available, create a mock embedding directly
-    logDiagnostic('No embedding pipeline available, creating mock embedding');
+    logDiagnostic('No embedding pipeline available, creating mock embedding directly', 'warning');
     
     try {
       // Create deterministic "mock" embeddings
@@ -722,12 +736,13 @@ export const useAiModel = (
         return Math.sin(x) * 0.5;
       });
       
-      logDiagnostic('Direct mock embedding created successfully');
+      logDiagnostic('Direct mock embedding created successfully', 'warning');
       return { data: mockEmbedding };
     } catch (error) {
-      logDiagnostic(`Error creating direct mock embedding: ${error instanceof Error ? error.message : String(error)}`);
+      logDiagnostic(`Error creating direct mock embedding: ${error instanceof Error ? error.message : String(error)}`, 'error');
       
       // Return random embeddings as absolute last resort
+      logDiagnostic('Absolute last resort: using random embeddings', 'error');
       return { 
         data: Array(384).fill(0).map(() => Math.random() - 0.5) 
       };
