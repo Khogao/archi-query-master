@@ -1,10 +1,9 @@
-
 import React, { useState } from 'react';
 import { useAiModel, EmbeddingModelType } from '@/hooks/useAiModel';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { SearchIcon, Loader2, BugIcon } from 'lucide-react';
+import { SearchIcon, Loader2, BugIcon, WifiIcon } from 'lucide-react';
 import { QueryResults, ResultChunk } from '@/components/QueryResults';
 import { searchSimilarChunks } from '@/utils/vectorUtils';
 
@@ -25,6 +24,7 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
   const [results, setResults] = useState<ResultChunk[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isTestingEmbedding, setIsTestingEmbedding] = useState(false);
+  const [isTestingLocalhost, setIsTestingLocalhost] = useState(false);
   const { toast } = useToast();
   const { 
     embeddingPipeline, 
@@ -223,6 +223,55 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
     }
   };
 
+  // Test if we can connect to localhost:11434 (Ollama default API endpoint)
+  const handleTestLocalhost = async () => {
+    setIsTestingLocalhost(true);
+    try {
+      console.log("Attempting to fetch http://localhost:11434...");
+      
+      // Attempt to fetch from localhost:11434
+      const response = await fetch('http://localhost:11434');
+      
+      // If we get here, the fetch succeeded (even if it's a 404 or other error from the server)
+      console.log("Fetch succeeded (or server responded)");
+      
+      toast({
+        title: "Connection Test Result",
+        description: "Fetch to localhost:11434 succeeded. Check console for details.",
+      });
+    } catch (error) {
+      // Check if it's a network error (like connection refused)
+      if (error instanceof TypeError && error.message.includes('NetworkError')) {
+        console.log("Fetch failed: Network Error (Connection Refused?)");
+        toast({
+          title: "Connection Test Result",
+          description: "Network Error (Connection Refused). Check console for details.",
+          variant: "destructive",
+        });
+      } 
+      // Check if it's a CORS error
+      else if (error instanceof TypeError && error.message.includes('CORS')) {
+        console.log("Fetch failed: CORS Error");
+        toast({
+          title: "Connection Test Result",
+          description: "CORS Error. Check console for details.",
+          variant: "destructive",
+        });
+      } 
+      // Other errors
+      else {
+        console.log(`Fetch failed: ${error instanceof Error ? error.message : String(error)}`);
+        toast({
+          title: "Connection Test Result",
+          description: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsTestingLocalhost(false);
+    }
+  };
+
   return (
     <div className="mt-8">
       <h2 className="text-xl font-semibold mb-4">Truy vấn tài liệu</h2>
@@ -235,7 +284,27 @@ export const QueryPanel: React.FC<QueryPanelProps> = ({
           className="min-h-[100px]"
         />
         
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 flex-wrap">
+          {/* Test Localhost Connection Button */}
+          <Button 
+            onClick={handleTestLocalhost}
+            disabled={isTestingLocalhost}
+            variant="outline"
+            className="gap-2"
+          >
+            {isTestingLocalhost ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <WifiIcon className="h-4 w-4" />
+                Test Localhost Connection
+              </>
+            )}
+          </Button>
+          
           {/* Test Embedding Query Button */}
           <Button 
             onClick={handleTestEmbedding}
