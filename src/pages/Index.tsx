@@ -17,17 +17,17 @@ const Index = () => {
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<EmbeddingModelType>(
     'Xenova/all-MiniLM-L6-v2' // Changed to reliable fallback model
   );
-  
+
   // OCR configuration
   const { config: ocrConfig, updateConfig, getReadableConfig } = useOcrConfig();
-  
+
   // Document management
-  const { 
-    documents, 
-    folders, 
-    addDocument, 
-    deleteDocument, 
-    addFolder, 
+  const {
+    documents,
+    folders,
+    addDocument,
+    deleteDocument,
+    addFolder,
     renameFolder,
     deleteFolder,
     toggleFolderSelection,
@@ -39,7 +39,7 @@ const Index = () => {
     getFolderById,
     getFolderPath
   } = useDocuments();
-  
+
   const [selectedFolderId, setSelectedFolderId] = useState('standards-architecture');
 
   const handleFolderSelect = (folderId: string) => {
@@ -90,14 +90,14 @@ const Index = () => {
         getFolderPath={getFolderPath}
         folders={folders}
       />
-      
-      <QueryPanel 
+
+      <QueryPanel
         getSelectedFolderIds={getSelectedFolderIds}
         selectedModel={selectedModel}
         selectedEmbeddingModel={selectedEmbeddingModel}
         selectedPlatform={selectedPlatform}
       />
-      
+
       <AIChat />
     </>
   );

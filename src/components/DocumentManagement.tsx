@@ -410,6 +410,8 @@ export const DocumentManagement: React.FC<DocumentManagementProps> = ({
           multiple
           className="hidden"
           onChange={handleFolderSelected}
+          aria-label="Chọn thư mục để tải lên"
+          title="Chọn thư mục để tải lên"
         />
       </div>
 
