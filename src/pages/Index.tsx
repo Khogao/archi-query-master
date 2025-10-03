@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useAiModel, AiModelType, EmbeddingModelType, PlatformType } from '@/hooks/useAiModel';
@@ -9,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { SidebarContent } from '@/components/SidebarContent';
 import { DocumentManagement } from '@/components/DocumentManagement';
 import { QueryPanel } from '@/components/QueryPanel';
+import { AIChat } from '@/components/AIChat';
 
 const Index = () => {
   // AI Model settings
@@ -97,6 +97,8 @@ const Index = () => {
         selectedEmbeddingModel={selectedEmbeddingModel}
         selectedPlatform={selectedPlatform}
       />
+      
+      <AIChat />
     </>
   );
 
