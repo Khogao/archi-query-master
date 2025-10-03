@@ -1,9 +1,9 @@
 
 import { VectorChunk } from './vectorUtils';
 import { addChunksToVectorStore } from './vectorStoreUtils';
-
-// Simulated OCR and text extraction since we can't use native Python libraries
-// In a real implementation, you would use worker threads and proper libraries
+import { smartExtractText, OcrProgressCallback } from './ocrEngine';
+import { embeddingCache, perfMonitor } from './performance';
+import { DocumentStorage, ChunkStorage } from './persistentStorage';
 
 /**
  * Constants for text extraction
@@ -17,7 +17,7 @@ const CHUNK_OVERLAP = 100; // Overlap between chunks to maintain context
 type ProgressCallback = (progress: number) => void;
 
 /**
- * Process a document file (PDF or DOCX)
+ * Process a document file (PDF or DOCX) - Production Version with Real OCR
  */
 export async function processDocument(
   file: File,
@@ -25,150 +25,64 @@ export async function processDocument(
   documentName: string,
   onProgress: ProgressCallback,
   embeddingPipeline: any
-): Promise<{ chunks: number }> {
-  // Initial progress update
-  onProgress(5);
+): Promise<{ chunks: number; method: 'text' | 'ocr' }> {
+  perfMonitor.mark('processDocument-start');
   
-  // Read the file
-  const text = await extractTextFromFile(file, onProgress);
-  
-  onProgress(60);
-  
-  // Split text into chunks
-  const chunks = chunkText(text, CHUNK_SIZE, CHUNK_OVERLAP);
-  
-  onProgress(70);
-  
-  // Generate embeddings and store chunks
-  await processChunks(chunks, documentName, folderId, file.name, embeddingPipeline, onProgress);
-  
-  onProgress(100);
-  
-  return { chunks: chunks.length };
-}
-
-/**
- * Extract text from file (PDF or DOCX)
- */
-async function extractTextFromFile(file: File, onProgress: ProgressCallback): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+  try {
+    // Initial progress update
+    onProgress(5);
     
-    reader.onload = async (event) => {
-      try {
-        onProgress(30);
-        
-        let text = '';
-        
-        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-          // PDF text extraction simulation
-          // In real implementation, you'd use a PDF library
-          text = simulatePdfTextExtraction(event.target?.result as ArrayBuffer);
-        } else if (
-          file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-          file.name.toLowerCase().endsWith('.docx')
-        ) {
-          // DOCX text extraction simulation
-          // In real implementation, you'd use a DOCX library
-          text = simulateDocxTextExtraction(event.target?.result as ArrayBuffer);
-        } else {
-          throw new Error('Định dạng tệp không được hỗ trợ');
-        }
-        
-        onProgress(50);
-        resolve(text);
-      } catch (error) {
-        reject(error);
-      }
+    // Read the file using real OCR engine
+    const ocrCallback: OcrProgressCallback = (ocrProgress) => {
+      // Map OCR progress (0-60%) to overall progress (5-60%)
+      const mappedProgress = 5 + (ocrProgress.progress * 0.55);
+      onProgress(mappedProgress);
     };
     
-    reader.onerror = () => {
-      reject(new Error('Lỗi khi đọc tệp tin'));
-    };
+    const { text, method } = await smartExtractText(file, ocrCallback);
     
-    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf') ||
-        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-        file.name.toLowerCase().endsWith('.docx')) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reject(new Error('Định dạng tệp không được hỗ trợ'));
-    }
-  });
-}
-
-/**
- * Simulate PDF text extraction
- * In a real implementation, you would use a PDF library like pdf.js
- */
-function simulatePdfTextExtraction(buffer: ArrayBuffer): string {
-  // Simulate PDF text extraction by generating random Vietnamese text
-  // This is just for demo purposes
-  const bufferView = new Uint8Array(buffer);
-  
-  // Generate random Vietnamese text based on file content
-  // Use the first 100 bytes as a seed for consistency
-  const seed = Array.from(bufferView.slice(0, 100)).reduce((acc, val) => acc + val, 0);
-  
-  return generateVietnameseText(seed, 10000);
-}
-
-/**
- * Simulate DOCX text extraction
- * In a real implementation, you would use a DOCX library
- */
-function simulateDocxTextExtraction(buffer: ArrayBuffer): string {
-  // Simulate DOCX text extraction by generating random Vietnamese text
-  // This is just for demo purposes
-  const bufferView = new Uint8Array(buffer);
-  
-  // Generate random Vietnamese text based on file content
-  // Use the first 100 bytes as a seed for consistency
-  const seed = Array.from(bufferView.slice(0, 100)).reduce((acc, val) => acc + val, 0);
-  
-  return generateVietnameseText(seed, 8000);
-}
-
-/**
- * Generate random Vietnamese-like text for demo purposes
- */
-function generateVietnameseText(seed: number, length: number): string {
-  const vietnameseSentences = [
-    "Theo quy định của pháp luật về xây dựng, hồ sơ thiết kế phải được thẩm định trước khi phê duyệt.",
-    "Các công trình xây dựng phải tuân thủ quy chuẩn kỹ thuật quốc gia và tiêu chuẩn áp dụng.",
-    "Chủ đầu tư có trách nhiệm tổ chức thẩm định thiết kế xây dựng theo quy định.",
-    "Dự án đầu tư xây dựng công trình phải phù hợp với quy hoạch xây dựng.",
-    "Nhà ở riêng lẻ có tổng diện tích sàn dưới 250m² không phải xin giấy phép xây dựng.",
-    "Chứng chỉ hành nghề kiến trúc sư do Bộ Xây dựng cấp theo quy định của pháp luật.",
-    "Công trình xây dựng phải đảm bảo an toàn cho người và tài sản trong quá trình sử dụng.",
-    "Giấy phép xây dựng có thời hạn 12 tháng kể từ ngày cấp.",
-    "Quy hoạch đô thị là việc tổ chức không gian đô thị và hệ thống công trình hạ tầng kỹ thuật.",
-    "Hệ số sử dụng đất là tỷ lệ giữa tổng diện tích sàn và diện tích khu đất.",
-    "Mật độ xây dựng thuần tối đa tùy thuộc vào loại đất và khu vực xây dựng.",
-    "Chỉ giới xây dựng là đường giới hạn cho phép xây dựng công trình trên lô đất.",
-    "Công trình phải đảm bảo yêu cầu về phòng cháy chữa cháy theo quy định hiện hành.",
-    "Bản vẽ thiết kế kỹ thuật phải do người có chứng chỉ hành nghề phù hợp ký tên.",
-    "Quy chuẩn về khoảng lùi công trình nhằm đảm bảo không gian và an toàn đô thị.",
-    "Tiêu chuẩn thiết kế TCVN 2737 quy định về tải trọng và tác động cho các công trình xây dựng.",
-    "Quy hoạch chi tiết tỷ lệ 1/500 phải thể hiện rõ tổ chức không gian kiến trúc cảnh quan.",
-    "Thời hạn cấp giấy phép xây dựng không quá 30 ngày kể từ ngày nhận đủ hồ sơ hợp lệ.",
-    "Chiều cao tối đa của công trình phụ thuộc vào quy hoạch và quy định của địa phương.",
-    "Tầng hầm công trình không tính vào số tầng nhưng tính vào chiều cao công trình."
-  ];
-  
-  let result = '';
-  let seedValue = seed;
-  
-  while (result.length < length) {
-    // Use the seed to select a sentence
-    const index = seedValue % vietnameseSentences.length;
-    result += vietnameseSentences[index] + ' ';
+    perfMonitor.mark('extraction-complete');
+    perfMonitor.measure('Text Extraction', 'processDocument-start', 'extraction-complete');
     
-    // Change seed for next iteration
-    seedValue = (seedValue * 9301 + 49297) % 233280;
+    onProgress(60);
+    
+    // Split text into chunks
+    const chunks = chunkText(text, CHUNK_SIZE, CHUNK_OVERLAP);
+    
+    onProgress(70);
+    
+    // Generate embeddings and store chunks
+    await processChunks(chunks, documentName, folderId, file.name, embeddingPipeline, onProgress);
+    
+    perfMonitor.mark('processDocument-end');
+    perfMonitor.measure('Total Processing', 'processDocument-start', 'processDocument-end');
+    
+    // Save document to persistent storage
+    await DocumentStorage.save({
+      id: `${documentName}_${Date.now()}`,
+      name: documentName,
+      type: file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx',
+      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+      dateAdded: new Date().toISOString().split('T')[0],
+      folderId: folderId,
+      content: text,
+      processingMethod: method,
+      chunks: chunks.map((_, i) => `${documentName}_${i}`)
+    });
+    
+    onProgress(100);
+    
+    return { chunks: chunks.length, method };
+  } catch (error) {
+    perfMonitor.mark('processDocument-error');
+    console.error('Error in processDocument:', error);
+    throw error;
   }
-  
-  return result.substring(0, length);
 }
+
+// Note: extractTextFromFile, simulatePdfTextExtraction, simulateDocxTextExtraction,
+// and generateVietnameseText functions are now replaced by real OCR implementation
+// in ocrEngine.ts
 
 /**
  * Split text into overlapping chunks
@@ -219,7 +133,7 @@ function chunkText(text: string, chunkSize: number, overlap: number): string[] {
 }
 
 /**
- * Process text chunks to generate embeddings and store them
+ * Process text chunks to generate embeddings and store them - Optimized with caching
  */
 async function processChunks(
   chunks: string[],
@@ -233,6 +147,8 @@ async function processChunks(
     throw new Error('Embedding pipeline not initialized');
   }
   
+  perfMonitor.mark('processChunks-start');
+  
   const vectorChunks: VectorChunk[] = [];
   const startProgress = 70;
   const endProgress = 95;
@@ -242,38 +158,51 @@ async function processChunks(
     const chunk = chunks[i];
     
     try {
-      // Generate embedding for this chunk
-      let embedding: number[];
-
-      // Check if the pipeline is a mock pipeline (for demo purposes)
-      if (embeddingPipeline.__call) {
-        // Use the mock pipeline's __call method
-        const result = await embeddingPipeline.__call(chunk, { pooling: "mean", normalize: true });
-        embedding = Array.from(result.data) as number[];
-      } else {
-        // Use the real pipeline
-        const result = await embeddingPipeline(chunk, { pooling: "mean", normalize: true });
+      // Check cache first for performance
+      let embedding: number[] | undefined = embeddingCache.get(chunk);
+      
+      if (!embedding) {
+        // Generate embedding for this chunk
+        perfMonitor.mark(`embedding-${i}-start`);
         
-        // Check if result has data property
-        if (!result || !result.data) {
-          console.error('Invalid embedding result:', result);
-          // Use mock embedding if result is invalid
-          embedding = Array(384).fill(0).map(() => Math.random() - 0.5);
-        } else {
-          // Convert to array of numbers with proper type assertion
+        // Check if the pipeline is a mock pipeline (for demo purposes)
+        if (embeddingPipeline.__call) {
+          // Use the mock pipeline's __call method
+          const result = await embeddingPipeline.__call(chunk, { pooling: "mean", normalize: true });
           embedding = Array.from(result.data) as number[];
+        } else {
+          // Use the real pipeline
+          const result = await embeddingPipeline(chunk, { pooling: "mean", normalize: true });
+          
+          // Check if result has data property
+          if (!result || !result.data) {
+            console.error('Invalid embedding result:', result);
+            // Use mock embedding if result is invalid
+            embedding = Array(384).fill(0).map(() => Math.random() - 0.5);
+          } else {
+            // Convert to array of numbers with proper type assertion
+            embedding = Array.from(result.data) as number[];
+          }
         }
+        
+        // Cache the embedding for future use
+        embeddingCache.set(chunk, embedding);
+        
+        perfMonitor.mark(`embedding-${i}-end`);
+        perfMonitor.measure(`Embedding ${i}`, `embedding-${i}-start`, `embedding-${i}-end`);
       }
       
       // Create vector chunk
-      vectorChunks.push({
+      const vectorChunk: VectorChunk = {
         id: `${documentName}_${i}`,
         text: chunk,
         embedding: embedding,
         documentId: fileName,
         documentName: documentName,
         folderId: folderId
-      });
+      };
+      
+      vectorChunks.push(vectorChunk);
       
       // Update progress
       onProgress(startProgress + (i + 1) * progressPerChunk);
@@ -297,6 +226,10 @@ async function processChunks(
     }
   }
   
-  // Store chunks in vector store
+  perfMonitor.mark('processChunks-end');
+  perfMonitor.measure('Process All Chunks', 'processChunks-start', 'processChunks-end');
+  
+  // Store chunks in both memory and persistent storage
   await addChunksToVectorStore(vectorChunks);
+  await ChunkStorage.saveBulk(vectorChunks);
 }
